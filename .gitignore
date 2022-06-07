@@ -1,3 +1,15 @@
+# Intellij Idea
+.idea/
+out/
+
+# gradle
+.gradle
+**/build/
+!src/**/build/
+
+# Ignore Gradle GUI config
+gradle-app.setting
+
 # Compiled class file
 *.class
 
