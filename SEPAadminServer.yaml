@@ -1,0 +1,192 @@
+openapi: "3.0.2"
+info:
+  title: API SETA
+  version: "1.0"
+servers:
+  - url: http://localhost:4000/
+paths:
+  /taxis:
+    post:
+      summary: Register a new taxi into the SETA system
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TaxiInfo'
+      responses:
+        '201':
+          description: Taxi registered
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/TaxiInsertionResponseOk'
+        '403':
+          description: the taxi Id is already present
+    get:
+      summary: get taxi list
+      responses:
+        '200':
+          description: OK
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type:
+                    schema:
+                      $ref: '#/components/schemas/TaxiInfo'
+
+  /taxis/statistics/report:
+    get:
+      summary: get the report related to all the taxis, considering only the timespan from tsStart to tsEnd
+      parameters:
+        - in: query
+          name: tsStart
+          required: true
+          description: start timestamp
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: tsEnd
+          required: true
+          description: end timestamp
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/ReportType'
+      responses:
+        '200':
+          description: OK
+          content:
+            'application/json':
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TaxiStatisticsReportOfTypeAvg'
+
+  /taxis/{id}:
+    delete:
+      summary: Remove a taxi from the SETA system
+      responses:
+        '200':
+          description: Taxi deleted
+        '404':
+          description: taxi id not found
+    parameters:
+      - $ref: '#/components/parameters/TaxiId'
+
+  /taxis/{id}/statistics:
+    post:
+      summary: load new statistics about a taxi
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TaxiStatistics'
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: taxi id not found
+
+  /taxis/{id}/statistics/report:
+    get:
+      summary: get the report related to a given taxi, considering only the last `n` statistics
+      parameters:
+        - $ref: '#/components/parameters/TaxiId'
+        - in: query
+          name: n
+          required: true
+          description: set of statistics to consider
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/ReportType'
+      responses:
+        '200':
+          description: OK
+          content:
+            'application/json':
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TaxiStatisticsReportOfTypeAvg'
+        '404':
+          description: taxi id not found
+
+components:
+  parameters:
+    TaxiId:
+      name: id
+      in: path
+      required: true
+      description: taxi id
+      schema:
+        type: integer
+    ReportType:
+      in: query
+      name: type
+      required: false
+      description: the type of the report
+      schema:
+        type: string
+        enum:
+          - average
+  schemas:
+    TaxiInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        ipAddress:
+          type: string
+        port:
+          type: integer
+    TaxiStatistics:
+      type: object
+      properties:
+        ts:
+          type: string
+          format: date-time
+        batteryLevel:
+          type: integer
+        stats:
+          type: object
+          properties:
+            kmsTraveled:
+              type: integer
+            numRides:
+              type: integer
+            pollutionAvgList:
+              type: array
+              items:
+                type: number
+    TaxiInsertionResponseOk:
+      type: object
+      properties:
+        startPosition:
+          type: object
+          properties:
+            x:
+              type: integer
+              minimum: 0
+              maximum: 9
+            y:
+              type: integer
+              minimum: 0
+              maximum: 9
+        currentTaxis:
+          type: array
+          items:
+            type:
+              schema:
+                $ref: '#/components/schemas/TaxiInfo'
+    TaxiStatisticsReportOfTypeAvg:
+      type: object
+      properties:
+        avgKmsTraveled:
+          type: number
+        avgBatteryLevel:
+          type: number
+        avgPollutionLevel:
+          type: number
+        avgNumRides:
+          type: number
