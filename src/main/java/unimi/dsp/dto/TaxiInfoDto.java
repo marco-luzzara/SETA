@@ -1,26 +1,26 @@
-package unimi.dsp.adminServer.dto;
+package unimi.dsp.dto;
 
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Objects;
 
 @XmlRootElement
 public class TaxiInfoDto {
-    private Integer id;
+    private int id;
     private String ipAddress;
-    private Integer port;
+    private int port;
 
     public TaxiInfoDto() {}
 
-    public TaxiInfoDto(Integer id, String ipAddress, Integer port) {
+    public TaxiInfoDto(int id, String ipAddress, int port) {
         this.id = id;
         this.ipAddress = ipAddress;
         this.port = port;
     }
 
-    public Integer getId() {
+    public int getId() {
         return id;
     }
-    public void setId(Integer id) {
+    public void setId(int id) {
         this.id = id;
     }
 
@@ -31,10 +31,10 @@ public class TaxiInfoDto {
         this.ipAddress = ipAddress;
     }
 
-    public Integer getPort() {
+    public int getPort() {
         return port;
     }
-    public void setPort(Integer port) {
+    public void setPort(int port) {
         this.port = port;
     }
 

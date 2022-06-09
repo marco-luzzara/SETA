@@ -1,17 +1,17 @@
 package unimi.dsp.adminServer.services;
 
-import unimi.dsp.adminServer.dto.TaxiInfoDto;
-import unimi.dsp.adminServer.dto.TaxiStatisticsDto;
+import unimi.dsp.dto.NewTaxiDto;
+import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.dto.TaxiStatisticsDto;
 
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.SecurityContext;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public interface TaxiService {
-    void getAllTaxis();
-    void getTaxiStatisticsReport(Integer id, Integer n,String type);
-    void getTaxisStatisticsReport(OffsetDateTime tsStart, OffsetDateTime tsEnd, String type);
-    void loadTaxiStatistics(Integer id, TaxiStatisticsDto taxiStatistics);
-    void registerTaxi(TaxiInfoDto taxiInfo);
-    void removeTaxi(Integer id);
+    List<TaxiInfoDto> getAllTaxis();
+    Object getTaxiStatisticsReport(int id, int n, String type);
+    Object getTaxisStatisticsReport(OffsetDateTime tsStart, OffsetDateTime tsEnd, String type);
+    void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics);
+    NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo);
+    void removeTaxi(int id);
 }

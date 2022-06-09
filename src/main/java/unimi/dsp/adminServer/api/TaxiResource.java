@@ -1,8 +1,8 @@
 package unimi.dsp.adminServer.api;
 
 import com.sun.jersey.api.NotFoundException;
-import unimi.dsp.adminServer.dto.TaxiInfoDto;
-import unimi.dsp.adminServer.dto.TaxiStatisticsDto;
+import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.dto.TaxiStatisticsDto;
 import unimi.dsp.adminServer.factories.TaxiServiceFactory;
 import unimi.dsp.adminServer.services.TaxiService;
 import java.time.OffsetDateTime;

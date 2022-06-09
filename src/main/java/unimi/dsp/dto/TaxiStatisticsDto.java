@@ -1,4 +1,4 @@
-package unimi.dsp.adminServer.dto;
+package unimi.dsp.dto;
 
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.List;
@@ -8,8 +8,15 @@ import java.time.OffsetDateTime;
 @XmlRootElement
 public class TaxiStatisticsDto {
     private OffsetDateTime ts;
-    private Integer batteryLevel;
+    private int batteryLevel;
     private TaxiStatisticsValues statsValues;
+
+    public TaxiStatisticsDto() {}
+    public TaxiStatisticsDto(OffsetDateTime ts, int batteryLevel, TaxiStatisticsValues statsValues) {
+        this.ts = ts;
+        this.batteryLevel = batteryLevel;
+        this.statsValues = statsValues;
+    }
 
     public OffsetDateTime getTs() {
         return ts;
@@ -18,10 +25,10 @@ public class TaxiStatisticsDto {
         this.ts = ts;
     }
 
-    public Integer getBatteryLevel() {
+    public int getBatteryLevel() {
         return batteryLevel;
     }
-    public void setBatteryLevel(Integer batteryLevel) {
+    public void setBatteryLevel(int batteryLevel) {
         this.batteryLevel = batteryLevel;
     }
 
@@ -64,21 +71,28 @@ public class TaxiStatisticsDto {
     }
 
     public class TaxiStatisticsValues {
-        private Integer kmsTraveled;
-        private Integer numRides;
+        private int kmsTraveled;
+        private int numRides;
         private List<Double> pollutionAvgList = null;
 
-        public Integer getKmsTraveled() {
+        public TaxiStatisticsValues() {}
+        public TaxiStatisticsValues(int kmsTraveled, int numRides, List<Double> pollutionAvgList) {
+            this.kmsTraveled = kmsTraveled;
+            this.numRides = numRides;
+            this.pollutionAvgList = pollutionAvgList;
+        }
+
+        public int getKmsTraveled() {
             return kmsTraveled;
         }
-        public void setKmsTraveled(Integer kmsTraveled) {
+        public void setKmsTraveled(int kmsTraveled) {
             this.kmsTraveled = kmsTraveled;
         }
 
-        public Integer getNumRides() {
+        public int getNumRides() {
             return numRides;
         }
-        public void setNumRides(Integer numRides) {
+        public void setNumRides(int numRides) {
             this.numRides = numRides;
         }
 
