@@ -10,8 +10,8 @@ public class ServerStarter {
     public static void main(String[] args) throws IOException {
         ConfigurationManager manager = ConfigurationManager.getInstance();
         String host = manager.getAdminServerHost();
-        String port = manager.getAdminServerPort();
-        String serverUri = String.format("http://%s:%s/", host, port);
+        int port = manager.getAdminServerPort();
+        String serverUri = String.format("http://%s:%d/", host, port);
         HttpServer server = HttpServerFactory.create(serverUri);
         server.start();
 

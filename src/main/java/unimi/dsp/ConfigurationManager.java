@@ -7,6 +7,8 @@ import java.util.Properties;
 
 public class ConfigurationManager {
     private static final String configFilePath = "config.properties";
+    // Properties is thread safe
+    // https://docs.oracle.com/javase/8/docs/api/java/util/Properties.html
     private static Properties props;
     private static volatile ConfigurationManager instance;
 
@@ -31,7 +33,15 @@ public class ConfigurationManager {
         return props.getProperty("adminServerHost");
     }
 
-    public String getAdminServerPort() {
-        return props.getProperty("adminServerPort");
+    public int getAdminServerPort() {
+        return Integer.parseInt(props.getProperty("adminServerPort"));
+    }
+
+    public int getSmartCityWidth() {
+        return Integer.parseInt(props.getProperty("smartCityWidth"));
+    }
+
+    public int getSmartCityHeight() {
+        return Integer.parseInt(props.getProperty("smartCityHeight"));
     }
 }
