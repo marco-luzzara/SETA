@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+    id 'war'
+    id "org.openapi.generator" version "6.0.0"
 }
 
 group 'unimi.dsp'
@@ -48,6 +50,26 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
+}
+
+openApiGenerate {
+    generatorName = "jaxrs-jersey"
+    inputSpec = "$rootDir/SEPAadminServer.yaml".toString()
+    outputDir = "$buildDir/generated".toString()
+    apiPackage = "unimi.dsp.api"
+    invokerPackage = "unimi.dsp.invoker"
+    modelPackage = "unimi.dsp.model"
+    skipValidateSpec = true
+    configOptions = [
+            library: "jersey1",
+            dateLibrary: "java8",
+            useBeanValidation: "true"
+    ]
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 test {

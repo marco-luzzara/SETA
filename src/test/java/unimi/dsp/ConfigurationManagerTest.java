@@ -8,7 +8,7 @@ import java.io.IOException;
 public class ConfigurationManagerTest {
     @Test
     public void getAdminServerHost_fromDefaultFile() throws IOException {
-        var manager = ConfigurationManager.getInstance();
+        ConfigurationManager manager = ConfigurationManager.getInstance();
         Assertions.assertEquals("localhost", manager.getAdminServerHost());
     }
 }

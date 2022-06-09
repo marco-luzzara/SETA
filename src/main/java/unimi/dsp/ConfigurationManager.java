@@ -30,4 +30,8 @@ public class ConfigurationManager {
     public String getAdminServerHost() {
         return props.getProperty("adminServerHost");
     }
+
+    public String getAdminServerPort() {
+        return props.getProperty("adminServerPort");
+    }
 }

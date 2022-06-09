@@ -8,27 +8,47 @@ paths:
   /taxis:
     post:
       summary: Register a new taxi into the SETA system
+      operationId: RegisterTaxi
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/TaxiInfo'
       responses:
         '201':
           description: Taxi registered
           content:
-            'application/json':
+            application/json:
               schema:
-                $ref: '#/components/schemas/TaxiInsertionResponseOk'
+                type: object
+                properties:
+                  startPosition:
+                    type: object
+                    properties:
+                      x:
+                        type: integer
+                        minimum: 0
+                        maximum: 9
+                      y:
+                        type: integer
+                        minimum: 0
+                        maximum: 9
+                  currentTaxis:
+                    type: array
+                    items:
+                      type:
+                        schema:
+                          $ref: '#/components/schemas/TaxiInfo'
         '403':
           description: the taxi Id is already present
     get:
       summary: get taxi list
+      operationId: GetAllTaxis
       responses:
         '200':
           description: OK
           content:
-            'application/json':
+            application/json:
               schema:
                 type: array
                 items:
@@ -39,6 +59,7 @@ paths:
   /taxis/statistics/report:
     get:
       summary: get the report related to all the taxis, considering only the timespan from tsStart to tsEnd
+      operationId: GetTaxisStatisticsReport
       parameters:
         - in: query
           name: tsStart
@@ -59,7 +80,7 @@ paths:
         '200':
           description: OK
           content:
-            'application/json':
+            application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/TaxiStatisticsReportOfTypeAvg'
@@ -67,6 +88,7 @@ paths:
   /taxis/{id}:
     delete:
       summary: Remove a taxi from the SETA system
+      operationId: RemoveTaxi
       responses:
         '200':
           description: Taxi deleted
@@ -78,9 +100,12 @@ paths:
   /taxis/{id}/statistics:
     post:
       summary: load new statistics about a taxi
+      operationId: LoadTaxiStatistics
+      parameters:
+        - $ref: '#/components/parameters/TaxiId'
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/TaxiStatistics'
       responses:
@@ -92,6 +117,7 @@ paths:
   /taxis/{id}/statistics/report:
     get:
       summary: get the report related to a given taxi, considering only the last `n` statistics
+      operationId: GetTaxiStatisticsReport
       parameters:
         - $ref: '#/components/parameters/TaxiId'
         - in: query
@@ -105,7 +131,7 @@ paths:
         '200':
           description: OK
           content:
-            'application/json':
+            application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/TaxiStatisticsReportOfTypeAvg'
@@ -159,26 +185,6 @@ components:
               type: array
               items:
                 type: number
-    TaxiInsertionResponseOk:
-      type: object
-      properties:
-        startPosition:
-          type: object
-          properties:
-            x:
-              type: integer
-              minimum: 0
-              maximum: 9
-            y:
-              type: integer
-              minimum: 0
-              maximum: 9
-        currentTaxis:
-          type: array
-          items:
-            type:
-              schema:
-                $ref: '#/components/schemas/TaxiInfo'
     TaxiStatisticsReportOfTypeAvg:
       type: object
       properties:
