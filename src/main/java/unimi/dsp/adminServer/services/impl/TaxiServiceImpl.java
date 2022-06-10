@@ -1,6 +1,7 @@
 package unimi.dsp.adminServer.services.impl;
 
 import unimi.dsp.adminServer.exceptions.IdAlreadyRegisteredException;
+import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.adminServer.util.TaxiPositionGenerator;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
@@ -62,8 +63,11 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     @Override
-    public void removeTaxi(int id) {
+    public void removeTaxi(int id) throws IdNotFoundException {
+        if (!taxiInfos.containsKey(id))
+            throw new IdNotFoundException(id);
 
+        this.taxiInfos.remove(id);
     }
 
     private class TaxiInfo {
