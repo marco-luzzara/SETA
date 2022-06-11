@@ -70,7 +70,7 @@ public class TaxiStatisticsDto {
         return sb.toString();
     }
 
-    public class TaxiStatisticsValues {
+    public static class TaxiStatisticsValues {
         private int kmsTraveled;
         private int numRides;
         private List<Double> pollutionAvgList = null;

@@ -2,15 +2,17 @@ package unimi.dsp.adminServer.services.impl;
 
 import unimi.dsp.adminServer.exceptions.IdAlreadyRegisteredException;
 import unimi.dsp.adminServer.exceptions.IdNotFoundException;
+import unimi.dsp.adminServer.exceptions.ReportTypeNotFoundException;
 import unimi.dsp.adminServer.util.TaxiPositionGenerator;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.dto.TaxiStatisticsAvgReportDto;
 import unimi.dsp.dto.TaxiStatisticsDto;
 import unimi.dsp.adminServer.services.TaxiService;
+import unimi.dsp.model.types.TaxiStatisticsReportType;
 
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.stream.*;
 
 public class TaxiServiceImpl implements TaxiService {
@@ -32,18 +34,54 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     @Override
-    public Object getTaxiStatisticsReport(int id, int n, String type) {
+    public Object getTaxiStatisticsReport(int id, int n, TaxiStatisticsReportType type)
+            throws IdNotFoundException, ReportTypeNotFoundException {
+        checkTaxiIdExists(id);
+
+        if (type == TaxiStatisticsReportType.AVERAGE) {
+            return getTaxiStatisticsAvgReport(id, n);
+        }
+        throw new ReportTypeNotFoundException(type);
+    }
+
+    private TaxiStatisticsAvgReportDto getTaxiStatisticsAvgReport(int id, int n) {
+        // reverse iterator to stream
+        // https://mkyong.com/java8/java-8-how-to-convert-iterator-to-stream/
+        Iterator<TaxiStatisticsDto> reverseIt = this.taxiInfos.get(id).taxiStatisticsList.descendingIterator();
+        List<TaxiStatisticsDto> nStats = StreamSupport.stream(
+                Spliterators.spliteratorUnknownSize(
+                        reverseIt,
+                        Spliterator.ORDERED),
+                 false)
+            .limit(n)
+            .collect(Collectors.toList());
+
+        return new TaxiStatisticsAvgReportDto(
+                nStats.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getKmsTraveled())),
+                nStats.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(TaxiStatisticsDto::getBatteryLevel)),
+                nStats.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getPollutionAvgList()
+                                .stream().mapToDouble(m -> m).average().orElse(0.0))),
+                nStats.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getNumRides()))
+        );
+    }
+
+    @Override
+    public Object getTaxisStatisticsReport(OffsetDateTime tsStart,
+                                           OffsetDateTime tsEnd,
+                                           TaxiStatisticsReportType type) {
         return null;
     }
 
     @Override
-    public Object getTaxisStatisticsReport(OffsetDateTime tsStart, OffsetDateTime tsEnd, String type) {
-        return null;
-    }
+    public void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics) throws IdNotFoundException {
+        checkTaxiIdExists(id);
 
-    @Override
-    public void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics) {
-
+        TaxiInfo taxiInfo = this.taxiInfos.get(id);
+        taxiInfo.addTaxiStatistics(taxiStatistics);
     }
 
     // the whole method must be synchronized because if I add/remove a taxi while this method is
@@ -64,15 +102,20 @@ public class TaxiServiceImpl implements TaxiService {
 
     @Override
     public void removeTaxi(int id) throws IdNotFoundException {
-        if (!taxiInfos.containsKey(id))
-            throw new IdNotFoundException(id);
+        checkTaxiIdExists(id);
 
         this.taxiInfos.remove(id);
+    }
+
+    private void checkTaxiIdExists(int id) throws IdNotFoundException {
+        if (!taxiInfos.containsKey(id))
+            throw new IdNotFoundException(id);
     }
 
     private class TaxiInfo {
         private String ipAddress;
         private int port;
+        private Deque<TaxiStatisticsDto> taxiStatisticsList = new ArrayDeque<>();
 
         public TaxiInfo(String ipAddress, int port) {
             this.ipAddress = ipAddress;
@@ -84,6 +127,13 @@ public class TaxiServiceImpl implements TaxiService {
         }
         public int getPort() {
             return port;
+        }
+        public List<TaxiStatisticsDto> getTaxiStatisticsList() {
+            return new ArrayList<>(taxiStatisticsList);
+        }
+
+        public void addTaxiStatistics(TaxiStatisticsDto taxiStatistics) {
+            this.taxiStatisticsList.add(taxiStatistics);
         }
     }
 }
