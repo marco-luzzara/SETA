@@ -48,7 +48,7 @@ public class TaxiServiceImpl implements TaxiService {
         // reverse iterator to stream
         // https://mkyong.com/java8/java-8-how-to-convert-iterator-to-stream/
         Iterator<TaxiStatisticsDto> reverseIt = this.taxiInfos.get(id).taxiStatisticsList.descendingIterator();
-        List<TaxiStatisticsDto> nStats = StreamSupport.stream(
+        List<TaxiStatisticsDto> statsList = StreamSupport.stream(
                 Spliterators.spliteratorUnknownSize(
                         reverseIt,
                         Spliterator.ORDERED),
@@ -56,24 +56,43 @@ public class TaxiServiceImpl implements TaxiService {
             .limit(n)
             .collect(Collectors.toList());
 
-        return new TaxiStatisticsAvgReportDto(
-                nStats.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getKmsTraveled())),
-                nStats.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(TaxiStatisticsDto::getBatteryLevel)),
-                nStats.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getPollutionAvgList()
-                                .stream().mapToDouble(m -> m).average().orElse(0.0))),
-                nStats.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getNumRides()))
-        );
+        return createAvgReportFromListOfStatistics(statsList);
     }
 
     @Override
     public Object getTaxisStatisticsReport(OffsetDateTime tsStart,
                                            OffsetDateTime tsEnd,
-                                           TaxiStatisticsReportType type) {
-        return null;
+                                           TaxiStatisticsReportType type) throws ReportTypeNotFoundException {
+        if (tsEnd.isBefore(tsStart))
+            throw new IllegalArgumentException("tsStart must come before tsEnd");
+
+        if (type == TaxiStatisticsReportType.AVERAGE) {
+            return getTaxisStatisticsAvgReport(tsStart, tsEnd);
+        }
+        throw new ReportTypeNotFoundException(type);
+    }
+
+    private TaxiStatisticsAvgReportDto getTaxisStatisticsAvgReport(OffsetDateTime tsStart, OffsetDateTime tsEnd) {
+        List<TaxiStatisticsDto> statsList = this.taxiInfos.values().stream()
+                .flatMap(ti -> ti.getTaxiStatisticsList().stream())
+                .filter(tsDto -> !tsDto.getTs().isBefore(tsStart) && !tsDto.getTs().isAfter(tsEnd))
+                .collect(Collectors.toList());
+
+        return createAvgReportFromListOfStatistics(statsList);
+    }
+
+    private TaxiStatisticsAvgReportDto createAvgReportFromListOfStatistics(List<TaxiStatisticsDto> statsList) {
+        return new TaxiStatisticsAvgReportDto(
+                statsList.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getKmsTraveled())),
+                statsList.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(TaxiStatisticsDto::getBatteryLevel)),
+                statsList.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getPollutionAvgList()
+                                .stream().mapToDouble(m -> m).average().orElse(0.0))),
+                statsList.stream().collect(Collectors
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getNumRides()))
+        );
     }
 
     @Override

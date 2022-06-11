@@ -14,7 +14,7 @@ import java.util.List;
 public interface TaxiService {
     List<TaxiInfoDto> getAllTaxis();
     Object getTaxiStatisticsReport(int id, int n, TaxiStatisticsReportType type) throws IdNotFoundException, ReportTypeNotFoundException;
-    Object getTaxisStatisticsReport(OffsetDateTime tsStart, OffsetDateTime tsEnd, TaxiStatisticsReportType type);
+    Object getTaxisStatisticsReport(OffsetDateTime tsStart, OffsetDateTime tsEnd, TaxiStatisticsReportType type) throws ReportTypeNotFoundException;
     void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics) throws IdNotFoundException;
     NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo) throws IdAlreadyRegisteredException;
     void removeTaxi(int id) throws IdNotFoundException;

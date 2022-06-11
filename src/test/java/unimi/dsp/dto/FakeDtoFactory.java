@@ -11,7 +11,15 @@ public class FakeDtoFactory {
     }
 
     public static TaxiStatisticsDto createTaxiStatisticsDtoFromSeed(int seed) {
-        return new TaxiStatisticsDto(OffsetDateTime.now(), seed,
+        return createTaxiStatisticsDtoFromParams(seed, OffsetDateTime.now());
+    }
+
+    public static TaxiStatisticsDto createTaxiStatisticsDtoFromSeed(int seed, OffsetDateTime ts) {
+        return createTaxiStatisticsDtoFromParams(seed, ts);
+    }
+
+    private static TaxiStatisticsDto createTaxiStatisticsDtoFromParams(int seed, OffsetDateTime ts) {
+        return new TaxiStatisticsDto(ts, seed,
                 new TaxiStatisticsDto.TaxiStatisticsValues(seed, seed,
                         new ArrayList<Double>() {{ add((double)seed); }}));
     }
