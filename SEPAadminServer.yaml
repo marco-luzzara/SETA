@@ -39,7 +39,7 @@ paths:
                       type:
                         schema:
                           $ref: '#/components/schemas/TaxiInfo'
-        '403':
+        '409':
           description: the taxi Id is already present
     get:
       summary: get taxi list
@@ -155,7 +155,7 @@ components:
       schema:
         type: string
         enum:
-          - average
+          - AVERAGE
   schemas:
     TaxiInfo:
       type: object

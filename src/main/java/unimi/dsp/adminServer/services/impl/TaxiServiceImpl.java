@@ -16,8 +16,8 @@ import java.util.*;
 import java.util.stream.*;
 
 public class TaxiServiceImpl implements TaxiService {
-    private TaxiPositionGenerator taxiPositionGenerator;
-    private HashMap<Integer, TaxiInfo> taxiInfos = new HashMap<>();
+    private final TaxiPositionGenerator taxiPositionGenerator;
+    private final HashMap<Integer, TaxiInfo> taxiInfos = new HashMap<>();
 
     public TaxiServiceImpl(TaxiPositionGenerator taxiPositionGenerator) {
         this.taxiPositionGenerator = taxiPositionGenerator;
@@ -84,14 +84,14 @@ public class TaxiServiceImpl implements TaxiService {
     private TaxiStatisticsAvgReportDto createAvgReportFromListOfStatistics(List<TaxiStatisticsDto> statsList) {
         return new TaxiStatisticsAvgReportDto(
                 statsList.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getKmsTraveled())),
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStatsValues().getKmsTraveled())),
                 statsList.stream().collect(Collectors
                         .<TaxiStatisticsDto>averagingDouble(TaxiStatisticsDto::getBatteryLevel)),
                 statsList.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getPollutionAvgList()
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStatsValues().getPollutionAvgList()
                                 .stream().mapToDouble(m -> m).average().orElse(0.0))),
                 statsList.stream().collect(Collectors
-                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStats().getNumRides()))
+                        .<TaxiStatisticsDto>averagingDouble(s -> s.getStatsValues().getNumRides()))
         );
     }
 
@@ -131,10 +131,10 @@ public class TaxiServiceImpl implements TaxiService {
             throw new IdNotFoundException(id);
     }
 
-    private class TaxiInfo {
-        private String ipAddress;
-        private int port;
-        private Deque<TaxiStatisticsDto> taxiStatisticsList = new ArrayDeque<>();
+    private static class TaxiInfo {
+        private final String ipAddress;
+        private final int port;
+        private final Deque<TaxiStatisticsDto> taxiStatisticsList = new ArrayDeque<>();
 
         public TaxiInfo(String ipAddress, int port) {
             this.ipAddress = ipAddress;

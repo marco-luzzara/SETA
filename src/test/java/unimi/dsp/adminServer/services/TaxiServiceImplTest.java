@@ -1,6 +1,5 @@
 package unimi.dsp.adminServer.services;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import unimi.dsp.adminServer.exceptions.IdAlreadyRegisteredException;
 import unimi.dsp.adminServer.exceptions.IdNotFoundException;
@@ -12,7 +11,8 @@ import unimi.dsp.model.types.TaxiStatisticsReportType;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.temporal.TemporalAmount;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -21,8 +21,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TaxiServiceImplTest {
-    private TaxiPositionGenerator taxiPositionGenerator = mock(TaxiPositionGenerator.class);
-    private TaxiService service = new TaxiServiceImpl(taxiPositionGenerator);
+    private final TaxiPositionGenerator taxiPositionGenerator = mock(TaxiPositionGenerator.class);
+    private final TaxiService service = new TaxiServiceImpl(taxiPositionGenerator);
 
     @Test
     public void Given0RegisteredTaxi_WhenGetAllTaxis_ThenReturn0Taxis() {
@@ -96,7 +96,7 @@ public class TaxiServiceImplTest {
 
     @Test
     public void GivenANonExistingId_WhenTaxiIsRemoved_ThenThrow()
-            throws IdAlreadyRegisteredException, IdNotFoundException {
+            throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
 
@@ -106,7 +106,7 @@ public class TaxiServiceImplTest {
 
     @Test
     public void GivenANonExistingId_WhenLoadTaxiStatistics_ThenThrow()
-            throws IdAlreadyRegisteredException, IdNotFoundException {
+            throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
 
@@ -116,7 +116,7 @@ public class TaxiServiceImplTest {
 
     @Test
     public void GivenANonExistingId_WhenGetTaxiStatisticsReport_ThenThrow()
-            throws IdAlreadyRegisteredException, IdNotFoundException {
+            throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
 
@@ -129,15 +129,15 @@ public class TaxiServiceImplTest {
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
-        TaxiStatisticsDto taxiStatisticsDto = loadTaxiStatistics(1, 1, OffsetDateTime.now());
+        TaxiStatisticsDto taxiStatisticsDto = loadTaxiStatistics(1, 1, OffsetDateTime.now(ZoneOffset.UTC));
 
         TaxiStatisticsAvgReportDto report = (TaxiStatisticsAvgReportDto) service
                 .getTaxiStatisticsReport(1, 1, TaxiStatisticsReportType.AVERAGE);
 
         assertEquals(taxiStatisticsDto.getBatteryLevel(), report.getAvgBatteryLevel());
-        assertEquals(taxiStatisticsDto.getStats().getKmsTraveled(), report.getAvgKmsTraveled());
-        assertEquals(taxiStatisticsDto.getStats().getNumRides(), report.getAvgNumRides());
-        assertEquals(taxiStatisticsDto.getStats().getPollutionAvgList().get(0), report.getAvgPollutionLevel());
+        assertEquals(taxiStatisticsDto.getStatsValues().getKmsTraveled(), report.getAvgKmsTraveled());
+        assertEquals(taxiStatisticsDto.getStatsValues().getNumRides(), report.getAvgNumRides());
+        assertEquals(taxiStatisticsDto.getStatsValues().getPollutionAvgList().get(0), report.getAvgPollutionLevel());
     }
 
     @Test
@@ -145,8 +145,8 @@ public class TaxiServiceImplTest {
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
-        loadTaxiStatistics(1, 1, OffsetDateTime.now());
-        loadTaxiStatistics(1, 2, OffsetDateTime.now());
+        loadTaxiStatistics(1, 1, OffsetDateTime.now(ZoneOffset.UTC));
+        loadTaxiStatistics(1, 2, OffsetDateTime.now(ZoneOffset.UTC));
 
         TaxiStatisticsAvgReportDto report = (TaxiStatisticsAvgReportDto) service
                 .getTaxiStatisticsReport(1, 2, TaxiStatisticsReportType.AVERAGE);
@@ -158,8 +158,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenEndBeforeStart_WhenGetAvgReportOfAllTaxis_ThenThrow()
-            throws ReportTypeNotFoundException {
+    public void GivenEndBeforeStart_WhenGetAvgReportOfAllTaxis_ThenThrow() {
         assertThrows(IllegalArgumentException.class, () -> service
                 .getTaxisStatisticsReport(OffsetDateTime.now(),
                         OffsetDateTime.now().minus(Duration.ofDays(1)), TaxiStatisticsReportType.AVERAGE));
@@ -170,10 +169,10 @@ public class TaxiServiceImplTest {
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
-        loadTaxiStatistics(1, 1, OffsetDateTime.now().minus(Duration.ofDays(5)));
+        loadTaxiStatistics(1, 1, OffsetDateTime.now(ZoneOffset.UTC).minus(Duration.ofDays(5)));
         TaxiStatisticsDto taxiStatisticsDto = loadTaxiStatistics(1, 2,
-                OffsetDateTime.now().minus(Duration.ofDays(3)));
-        loadTaxiStatistics(1, 3, OffsetDateTime.now());
+                OffsetDateTime.now(ZoneOffset.UTC).minus(Duration.ofDays(3)));
+        loadTaxiStatistics(1, 3, OffsetDateTime.now(ZoneOffset.UTC));
 
         TaxiStatisticsAvgReportDto report = (TaxiStatisticsAvgReportDto) service
                 .getTaxisStatisticsReport(
@@ -182,9 +181,9 @@ public class TaxiServiceImplTest {
                         TaxiStatisticsReportType.AVERAGE);
 
         assertEquals(taxiStatisticsDto.getBatteryLevel(), report.getAvgBatteryLevel());
-        assertEquals(taxiStatisticsDto.getStats().getKmsTraveled(), report.getAvgKmsTraveled());
-        assertEquals(taxiStatisticsDto.getStats().getNumRides(), report.getAvgNumRides());
-        assertEquals(taxiStatisticsDto.getStats().getPollutionAvgList().get(0), report.getAvgPollutionLevel());
+        assertEquals(taxiStatisticsDto.getStatsValues().getKmsTraveled(), report.getAvgKmsTraveled());
+        assertEquals(taxiStatisticsDto.getStatsValues().getNumRides(), report.getAvgNumRides());
+        assertEquals(taxiStatisticsDto.getStatsValues().getPollutionAvgList().get(0), report.getAvgPollutionLevel());
     }
 
     @Test
@@ -194,13 +193,13 @@ public class TaxiServiceImplTest {
         service.registerTaxi(taxiInfo1);
         TaxiInfoDto taxiInfo2 = FakeDtoFactory.createTaxiInfoDto(2);
         service.registerTaxi(taxiInfo2);
-        loadTaxiStatistics(1, 1, OffsetDateTime.now());
-        loadTaxiStatistics(2, 2, OffsetDateTime.now());
+        loadTaxiStatistics(1, 1, OffsetDateTime.now(ZoneOffset.UTC));
+        loadTaxiStatistics(2, 2, OffsetDateTime.now(ZoneOffset.UTC));
 
         TaxiStatisticsAvgReportDto report = (TaxiStatisticsAvgReportDto) service
                 .getTaxisStatisticsReport(
-                        OffsetDateTime.now().minus(Duration.ofDays(3)),
-                        OffsetDateTime.now(),
+                        OffsetDateTime.now(ZoneOffset.UTC).minus(Duration.ofDays(3)),
+                        OffsetDateTime.now(ZoneOffset.UTC),
                         TaxiStatisticsReportType.AVERAGE
                 );
 
