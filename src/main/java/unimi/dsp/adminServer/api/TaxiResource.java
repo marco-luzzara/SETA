@@ -10,9 +10,11 @@ import unimi.dsp.adminServer.factories.TaxiServiceFactory;
 import unimi.dsp.adminServer.services.TaxiService;
 import unimi.dsp.model.types.TaxiStatisticsReportType;
 
+import javax.ws.rs.core.GenericEntity;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.*;
+import java.util.List;
 
 @Path("/taxis")
 public class TaxiResource {
@@ -21,7 +23,7 @@ public class TaxiResource {
     @GET
     @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
     public Response getAllTaxis() {
-        return Response.ok(service.getAllTaxis()).build();
+        return Response.ok(new GenericEntity<List<TaxiInfoDto>>(service.getAllTaxis()) {}).build();
     }
 
     @GET
