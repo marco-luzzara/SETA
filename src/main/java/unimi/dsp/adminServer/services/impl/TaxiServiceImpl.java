@@ -3,12 +3,13 @@ package unimi.dsp.adminServer.services.impl;
 import unimi.dsp.adminServer.exceptions.IdAlreadyRegisteredException;
 import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.adminServer.exceptions.ReportTypeNotFoundException;
-import unimi.dsp.adminServer.util.TaxiPositionGenerator;
+import unimi.dsp.adminServer.services.TaxiPositionGenerator;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsAvgReportDto;
 import unimi.dsp.dto.TaxiStatisticsDto;
 import unimi.dsp.adminServer.services.TaxiService;
+import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.model.types.TaxiStatisticsReportType;
 
 import java.time.OffsetDateTime;
@@ -113,10 +114,9 @@ public class TaxiServiceImpl implements TaxiService {
             throw new IdAlreadyRegisteredException(taxiInfo.getId());
         this.taxiInfos.put(taxiInfo.getId(),
                 new TaxiInfo(taxiInfo.getIpAddress(), taxiInfo.getPort()));
+        SmartCityPosition newTaxiPosition = this.taxiPositionGenerator.getStartingPosition();
 
-        return new NewTaxiDto(this.taxiPositionGenerator.getXCoordinate(),
-                this.taxiPositionGenerator.getYCoordinate(),
-                taxiInfoDtos);
+        return new NewTaxiDto(newTaxiPosition.x, newTaxiPosition.y, taxiInfoDtos);
     }
 
     @Override

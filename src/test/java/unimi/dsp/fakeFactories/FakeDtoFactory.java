@@ -1,5 +1,8 @@
-package unimi.dsp.dto;
+package unimi.dsp.fakeFactories;
 
+import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.dto.TaxiStatisticsDto;
+import unimi.dsp.dto.TaxiStatisticsValues;
 import unimi.dsp.dto.types.SerializableOffsetDateTime;
 
 import java.time.OffsetDateTime;

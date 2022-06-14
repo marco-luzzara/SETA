@@ -2,7 +2,7 @@ package unimi.dsp.adminServer;
 
 import com.sun.jersey.api.container.httpserver.HttpServerFactory;
 import com.sun.net.httpserver.HttpServer;
-import unimi.dsp.ConfigurationManager;
+import unimi.dsp.util.ConfigurationManager;
 
 import java.io.IOException;
 

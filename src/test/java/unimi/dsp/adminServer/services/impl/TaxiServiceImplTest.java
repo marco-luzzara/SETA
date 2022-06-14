@@ -1,17 +1,20 @@
-package unimi.dsp.adminServer.services;
+package unimi.dsp.adminServer.services.impl;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import unimi.dsp.adminServer.exceptions.IdAlreadyRegisteredException;
 import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.adminServer.exceptions.ReportTypeNotFoundException;
+import unimi.dsp.adminServer.services.TaxiPositionGenerator;
+import unimi.dsp.adminServer.services.TaxiService;
 import unimi.dsp.adminServer.services.impl.TaxiServiceImpl;
-import unimi.dsp.adminServer.util.TaxiPositionGenerator;
 import unimi.dsp.dto.*;
+import unimi.dsp.fakeFactories.FakeDtoFactory;
+import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.model.types.TaxiStatisticsReportType;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -23,6 +26,11 @@ import static org.mockito.Mockito.when;
 public class TaxiServiceImplTest {
     private final TaxiPositionGenerator taxiPositionGenerator = mock(TaxiPositionGenerator.class);
     private final TaxiService service = new TaxiServiceImpl(taxiPositionGenerator);
+
+    @BeforeEach
+    public void initializeTest() {
+        when(taxiPositionGenerator.getStartingPosition()).thenReturn(new SmartCityPosition(0, 0));
+    }
 
     @Test
     public void Given0RegisteredTaxi_WhenGetAllTaxis_ThenReturn0Taxis() {
@@ -45,8 +53,8 @@ public class TaxiServiceImplTest {
     @Test
     public void GivenANewTaxi_WhenItIsTheFirstToBeRegistered_ThenThereIsNoTaxiInfo()
             throws IdAlreadyRegisteredException {
-        when(taxiPositionGenerator.getXCoordinate()).thenReturn(0);
-        when(taxiPositionGenerator.getYCoordinate()).thenReturn(9);
+        when(taxiPositionGenerator.getStartingPosition())
+                .thenReturn(new SmartCityPosition(0, 9));
         TaxiInfoDto taxiInfo = FakeDtoFactory.createTaxiInfoDto(1);
 
         NewTaxiDto newTaxiDto = service.registerTaxi(taxiInfo);

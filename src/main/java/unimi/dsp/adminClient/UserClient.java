@@ -4,14 +4,13 @@ import com.sun.jersey.api.client.*;
 import com.sun.jersey.api.client.config.ClientConfig;
 import com.sun.jersey.api.client.config.DefaultClientConfig;
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider;
-import unimi.dsp.ConfigurationManager;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsAvgReportDto;
+import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.DateTimeUtil;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.InputMismatchException;
@@ -19,7 +18,7 @@ import java.util.List;
 import java.util.Scanner;
 
 public class UserClient {
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         ClientConfig config = new DefaultClientConfig();
         // enabling automatic marshalling for json
         // https://stackoverflow.com/questions/27341788/jersey-clientresponse-getentity-of-generic-type
