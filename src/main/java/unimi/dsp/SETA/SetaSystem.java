@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 
 public class SetaSystem {
     private static ConfigurationManager configurationManager = ConfigurationManager.getInstance();
+    private static final String RIDE_REQUEST_TOPIC_PREFIX = configurationManager.getRideRequestTopicPrefix();
 
     private RideGenerator rideGenerator;
     private int requestLimit;
@@ -47,7 +48,7 @@ public class SetaSystem {
             for (int i = 0; i < numGeneratedRequest; i++) {
                 RideRequestDto rideRequest = this.rideGenerator.generateRide();
                 this.mqttClient.publish(
-                        configurationManager.getRideRequestTopicPrefix() + rideRequest.getDistrict(),
+                        RIDE_REQUEST_TOPIC_PREFIX + rideRequest.getDistrict(),
                         getPayloadFromRideRequest(rideRequest),
                         2, false);
                 this.curId++;

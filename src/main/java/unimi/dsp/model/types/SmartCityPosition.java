@@ -2,6 +2,8 @@ package unimi.dsp.model.types;
 
 import unimi.dsp.util.ConfigurationManager;
 
+import java.util.Objects;
+
 public class SmartCityPosition {
     private static ConfigurationManager configurationManager;
     private static int maxWidth;
@@ -23,6 +25,19 @@ public class SmartCityPosition {
                             maxWidth, maxHeight, x, y));
         this.x = x;
         this.y = y;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        SmartCityPosition that = (SmartCityPosition) o;
+        return x == that.x && y == that.y;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(x, y);
     }
 
     @Override

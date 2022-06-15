@@ -4,6 +4,7 @@ import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import java.io.IOException;
 
@@ -18,7 +19,7 @@ public class MQTTClientFactory {
 
     public static MqttAsyncClient getClient() throws MqttException {
         String clientId = MqttClient.generateClientId();
-        MqttAsyncClient client = new MqttAsyncClient(brokerUri, clientId);
+        MqttAsyncClient client = new MqttAsyncClient(brokerUri, clientId, new MemoryPersistence());
 
         MqttConnectOptions connOpts = new MqttConnectOptions();
         connOpts.setCleanSession(true);
