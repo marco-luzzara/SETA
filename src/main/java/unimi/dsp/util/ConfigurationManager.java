@@ -31,20 +31,12 @@ public class ConfigurationManager {
         }
     }
 
-    public String getAdminServerHost() {
-        return props.getProperty("adminServerHost");
+    public String getAdminServerEndpoint() {
+        return props.getProperty("adminServerEndpoint");
     }
 
-    public int getAdminServerPort() {
-        return Integer.parseInt(props.getProperty("adminServerPort"));
-    }
-
-    public String getBrokerHost() {
-        return props.getProperty("brokerHost");
-    }
-
-    public int getBrokerPort() {
-        return Integer.parseInt(props.getProperty("brokerPort"));
+    public String getBrokerEndpoint() {
+        return props.getProperty("brokerEndpoint");
     }
 
     public int getSmartCityWidth() {

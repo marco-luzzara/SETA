@@ -14,7 +14,7 @@ public class MQTTClientFactory {
 
     static {
         configManager = ConfigurationManager.getInstance();
-        brokerUri = String.format("tcp://%s:%d", configManager.getBrokerHost(), configManager.getBrokerPort());
+        brokerUri = configManager.getBrokerEndpoint();
     }
 
     public static MqttAsyncClient getClient() throws MqttException {

@@ -18,6 +18,9 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/*
+requirements: sudo service mosquitto start
+ */
 public class SetaSystemTest {
     // at the end of each test I check if "OK" has been written in this sb. this is an easy way
     // to verify if the test was successful, given that assertions exceptions are sinked in threads.
@@ -29,7 +32,7 @@ public class SetaSystemTest {
             .getInstance().getRideRequestTopicPrefix();
 
     @Test
-    public void GivenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() throws MqttException {
+    public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() throws MqttException {
         runWithinClient(client -> {
             try {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
@@ -52,11 +55,11 @@ public class SetaSystemTest {
             }
         });
 
-        assertCallbacksSuccesful(1);
+        assertCallbacksSuccessful(1);
     }
 
     @Test
-    public void GivenManyRideRequest_WhenSETARun_MQTTSubSeeAllRides() throws MqttException {
+    public void givenManyRideRequest_WhenSETARun_MQTTSubSeeAllRides() throws MqttException {
         runWithinClient(client -> {
             try {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
@@ -86,10 +89,10 @@ public class SetaSystemTest {
             }
         });
 
-        assertCallbacksSuccesful(2);
+        assertCallbacksSuccessful(2);
     }
 
-    private void assertCallbacksSuccesful(int messagesNum) {
+    private void assertCallbacksSuccessful(int messagesNum) {
         try {
             assertEquals(
                     String.join("", Collections.nCopies(messagesNum, "OK")),

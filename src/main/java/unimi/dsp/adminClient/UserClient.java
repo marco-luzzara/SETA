@@ -8,6 +8,7 @@ import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsAvgReportDto;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.DateTimeUtil;
+import unimi.dsp.util.RestUtils;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -26,9 +27,7 @@ public class UserClient {
 
         Client client = Client.create(config);
         ConfigurationManager configManager = ConfigurationManager.getInstance();
-        String serverAddress = String.format("http://%s:%d",
-                configManager.getAdminServerHost(),
-                configManager.getAdminServerPort());
+        String serverAddress = configManager.getAdminServerEndpoint();
 
         int userChoice = 0;
         do {
@@ -75,7 +74,7 @@ public class UserClient {
     }
 
     private static void enterGetAllTaxisFlow(Client client, String serverAddress) {
-        ClientResponse response = sendGetRequest(client, serverAddress + "/taxis");
+        ClientResponse response = RestUtils.sendGetRequest(client, serverAddress + "/taxis");
         printResponseBody(response, new GenericType<List<TaxiInfoDto>>() {});
     }
 
@@ -97,7 +96,7 @@ public class UserClient {
             return;
         }
 
-        ClientResponse response = sendGetRequest(client,
+        ClientResponse response = RestUtils.sendGetRequest(client,
                 serverAddress + String.format("/taxis/%d/statistics/report?n=%d", taxiId, n));
 
         if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
@@ -129,7 +128,7 @@ public class UserClient {
                 String.format("/taxis/statistics/report?tsStart=%s&tsEnd=%s",
                         DateTimeUtil.getStringFromOffsetDateTime(tsStart),
                         DateTimeUtil.getStringFromOffsetDateTime(tsEnd));
-        ClientResponse response = sendGetRequest(client,url);
+        ClientResponse response = RestUtils.sendGetRequest(client,url);
 
         printResponseBody(response, new GenericType<TaxiStatisticsAvgReportDto>() {});
     }
@@ -141,17 +140,6 @@ public class UserClient {
         }
         catch (DateTimeParseException e) {
             throw new IllegalArgumentException(e);
-        }
-    }
-
-    private static ClientResponse sendGetRequest(Client client, String url){
-        WebResource webResource = client.resource(url);
-        try {
-            return webResource.accept(MediaType.APPLICATION_JSON).get(ClientResponse.class);
-        } catch (ClientHandlerException e) {
-            System.out.println("Server is down");
-            System.exit(1);
-            return null;
         }
     }
 }

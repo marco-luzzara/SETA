@@ -35,14 +35,14 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void Given0RegisteredTaxi_WhenGetAllTaxis_ThenReturn0Taxis() {
+    public void given0RegisteredTaxi_WhenGetAllTaxis_ThenReturn0Taxis() {
         List<TaxiInfoDto> taxiInfos = service.getAllTaxis();
 
         assertEquals(0, taxiInfos.size());
     }
 
     @Test
-    public void GivenManyRegisteredTaxi_WhenGetAllTaxis_ThenReturnManyTaxis()
+    public void givenManyRegisteredTaxi_WhenGetAllTaxis_ThenReturnManyTaxis()
             throws IdAlreadyRegisteredException {
         service.registerTaxi(FakeDtoFactory.createTaxiInfoDto(1));
         service.registerTaxi(FakeDtoFactory.createTaxiInfoDto(2));
@@ -53,7 +53,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANewTaxi_WhenItIsTheFirstToBeRegistered_ThenThereIsNoTaxiInfo()
+    public void givenANewTaxi_WhenItIsTheFirstToBeRegistered_ThenThereIsNoTaxiInfo()
             throws IdAlreadyRegisteredException {
         when(taxiPositionGenerator.getStartingPosition())
                 .thenReturn(new SmartCityPosition(0, 9));
@@ -67,7 +67,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANewTaxi_WhenManyTaxisAreRegistered_ThenThereAreManyTaxiInfo()
+    public void givenANewTaxi_WhenManyTaxisAreRegistered_ThenThereAreManyTaxiInfo()
             throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         TaxiInfoDto taxiInfo2 = FakeDtoFactory.createTaxiInfoDto(2);
@@ -81,7 +81,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANewTaxi_WhenAnotherTaxiHasTheSameId_ThenThrow()
+    public void givenANewTaxi_WhenAnotherTaxiHasTheSameId_ThenThrow()
             throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         TaxiInfoDto taxiInfo2 = FakeDtoFactory.createTaxiInfoDto(1);
@@ -94,7 +94,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenARegisteredTaxi_WhenItIsRemoved_ThenItDoesNotAppearAnymore()
+    public void givenARegisteredTaxi_WhenItIsRemoved_ThenItDoesNotAppearAnymore()
             throws IdAlreadyRegisteredException, IdNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -105,7 +105,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANonExistingId_WhenTaxiIsRemoved_ThenThrow()
+    public void givenANonExistingId_WhenTaxiIsRemoved_ThenThrow()
             throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -115,7 +115,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANonExistingId_WhenLoadTaxiStatistics_ThenThrow()
+    public void givenANonExistingId_WhenLoadTaxiStatistics_ThenThrow()
             throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -125,7 +125,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenANonExistingId_WhenGetTaxiStatisticsReport_ThenThrow()
+    public void givenANonExistingId_WhenGetTaxiStatisticsReport_ThenThrow()
             throws IdAlreadyRegisteredException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -135,7 +135,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenASingleStatistics_WhenGetAvgReportOfSingleTaxi_ThenReturnStatUnchanged()
+    public void givenASingleStatistics_WhenGetAvgReportOfSingleTaxi_ThenReturnStatUnchanged()
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -151,7 +151,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenManyStatistics_WhenGetAvgReportOfSingleTaxi_ThenReturnAvg()
+    public void givenManyStatistics_WhenGetAvgReportOfSingleTaxi_ThenReturnAvg()
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -168,14 +168,14 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenEndBeforeStart_WhenGetAvgReportOfAllTaxis_ThenThrow() {
+    public void givenEndBeforeStart_WhenGetAvgReportOfAllTaxis_ThenThrow() {
         assertThrows(IllegalArgumentException.class, () -> service
                 .getTaxisStatisticsReport(OffsetDateTime.now(),
                         OffsetDateTime.now().minus(Duration.ofDays(1)), TaxiStatisticsReportType.AVERAGE));
     }
 
     @Test
-    public void GivenManyStatistics_WhenGetAvgReportOfAllTaxisWithFilterOnTs_ThenReturnPartialStats()
+    public void givenManyStatistics_WhenGetAvgReportOfAllTaxisWithFilterOnTs_ThenReturnPartialStats()
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);
@@ -197,7 +197,7 @@ public class TaxiServiceImplTest {
     }
 
     @Test
-    public void GivenManyStatistics_WhenGetAvgReportForAllTaxis_ThenReturnAvg()
+    public void givenManyStatistics_WhenGetAvgReportForAllTaxis_ThenReturnAvg()
             throws IdAlreadyRegisteredException, IdNotFoundException, ReportTypeNotFoundException {
         TaxiInfoDto taxiInfo1 = FakeDtoFactory.createTaxiInfoDto(1);
         service.registerTaxi(taxiInfo1);

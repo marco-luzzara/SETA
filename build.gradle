@@ -73,6 +73,12 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
+//task runAdminServer(type: JavaExec) {
+//    description = "Run the server"
+//    classpath = sourceSets.main.runtimeClasspath
+//    main = "unimi.dsp.adminServer.ServerStarter"
+//}
+
 test {
     useJUnitPlatform()
 }
