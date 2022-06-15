@@ -10,6 +10,7 @@ import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 
 public class SetaSystem {
     private static ConfigurationManager configurationManager = ConfigurationManager.getInstance();
@@ -21,6 +22,7 @@ public class SetaSystem {
     private int numGeneratedRequest;
     private int curId;
     private IMqttAsyncClient mqttClient;
+    private int qos;
 
     /**
      * Create a SETA system
@@ -33,11 +35,13 @@ public class SetaSystem {
     public SetaSystem(RideGenerator rideGenerator,
                       int requestLimit,
                       int genFrequencyMillis,
-                      int numGeneratedRequest) throws MqttException {
+                      int numGeneratedRequest,
+                      int qos) throws MqttException {
         this.rideGenerator = rideGenerator;
         this.requestLimit = requestLimit;
         this.genFrequencyMillis = genFrequencyMillis;
         this.numGeneratedRequest = numGeneratedRequest;
+        this.qos = qos;
         this.curId = 0;
 
         this.mqttClient = MQTTClientFactory.getClient();
@@ -50,7 +54,7 @@ public class SetaSystem {
                 this.mqttClient.publish(
                         RIDE_REQUEST_TOPIC_PREFIX + rideRequest.getDistrict(),
                         getPayloadFromRideRequest(rideRequest),
-                        2, false);
+                        this.qos, false);
                 this.curId++;
 
                 if (curId == requestLimit)
@@ -67,18 +71,41 @@ public class SetaSystem {
     }
 
     public static void main(String[] args) throws MqttException, InterruptedException {
-//        MqttAsyncClient client = MQTTClientFactory.getClient();
-//        int curId = 0;
-//        ConfigurationManager configurationManager = ConfigurationManager.getInstance();
-//        int generationFrequencyMillis = configurationManager.getSETAGenerationFrequencyMillis();
-//        int numGeneratedRequest = configurationManager.getSETANumGeneratedRequest();
-//
-//        while(true) {
-//
-//
-//            Thread.sleep(generationFrequencyMillis);
-//            client.publish()
-//        }
+        MqttAsyncClient client = MQTTClientFactory.getClient();
+        if (client.isConnected())
+            System.out.println("MQTT client for SETA is ready");
+        int generationFrequencyMillis = configurationManager.getSETAGenerationFrequencyMillis();
+        int numGeneratedRequest = configurationManager.getSETANumGeneratedRequest();
+        RideGenerator rideGenerator = new RideGenerator() {
+            private int id = -1;
+            private Random random = new Random();
+            private int smartCityWidth = configurationManager.getSmartCityWidth();
+            private int smartCityHeight = configurationManager.getSmartCityHeight();
+
+            @Override
+            public RideRequestDto generateRide() {
+                SmartCityPosition start, end;
+                do {
+                    start = new SmartCityPosition(
+                            random.nextInt(smartCityWidth),
+                            random.nextInt(smartCityHeight)
+                        );
+                    end = new SmartCityPosition(
+                            random.nextInt(smartCityWidth),
+                            random.nextInt(smartCityHeight)
+                        );
+                } while (start.equals(end));
+
+                this.id++;
+
+                return new RideRequestDto(this.id, start, end);
+            }
+        };
+
+        SetaSystem ss = new SetaSystem(rideGenerator, 0,
+                generationFrequencyMillis, numGeneratedRequest, 1);
+
+        ss.run();
     }
 
     public interface RideGenerator {

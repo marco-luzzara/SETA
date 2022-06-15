@@ -41,7 +41,7 @@ public class SetaSystemTest {
                 IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "1", 2);
                 SetaSystem ss = new SetaSystem(
                         RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                        1, 1, 1);
+                        1, 1, 1, 2);
 
                 ss.run();
 
@@ -75,7 +75,7 @@ public class SetaSystemTest {
                                         new SmartCityPosition(0, 0), new SmartCityPosition(0, 1)),
                                 new RideRequestDto(1,
                                         new SmartCityPosition(1, 2), new SmartCityPosition(3, 4))),
-                        2, 10, 1);
+                        2, 10, 1, 2);
 
                 ss.run();
 
