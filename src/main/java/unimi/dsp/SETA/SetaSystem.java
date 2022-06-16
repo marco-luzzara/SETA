@@ -5,6 +5,7 @@ import org.eclipse.paho.client.mqttv3.IMqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import unimi.dsp.dto.RideRequestDto;
+import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
@@ -52,7 +53,7 @@ public class SetaSystem {
             for (int i = 0; i < numGeneratedRequest; i++) {
                 RideRequestDto rideRequest = this.rideGenerator.generateRide();
                 this.mqttClient.publish(
-                        RIDE_REQUEST_TOPIC_PREFIX + rideRequest.getDistrict(),
+                        RIDE_REQUEST_TOPIC_PREFIX + District.fromPosition(rideRequest.getStart()),
                         getPayloadFromRideRequest(rideRequest),
                         this.qos, false);
                 this.curId++;

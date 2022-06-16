@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'war'
     id "org.openapi.generator" version "6.0.0"
+    id "com.google.protobuf" version "0.8.10"
 }
 
 group 'unimi.dsp'
@@ -43,6 +44,13 @@ dependencies {
     // OpenAPI generator
     // implementation 'org.openapitools:openapi-generator-gradle-plugin:6.0.0'
 
+    // GRPC
+    // https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java
+    compile group: 'com.google.protobuf', name: 'protobuf-java', version: '3.10.0'
+
+    // https://mvnrepository.com/artifact/io.grpc/grpc-all
+    compile group: 'io.grpc', name: 'grpc-all', version: '1.25.0'
+
     // MQTT Dependencies
     // https://mvnrepository.com/artifact/org.eclipse.paho/org.eclipse.paho.client.mqttv3
     implementation group: 'org.eclipse.paho', name: 'org.eclipse.paho.client.mqttv3', version: '1.2.5'
@@ -68,16 +76,41 @@ openApiGenerate {
     ]
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
 }
 
-//task runAdminServer(type: JavaExec) {
-//    description = "Run the server"
-//    classpath = sourceSets.main.runtimeClasspath
-//    main = "unimi.dsp.adminServer.ServerStarter"
-//}
+protobuf {
+    protoc {
+        artifact = 'com.google.protobuf:protoc:3.10.1'
+    }
+
+    plugins {
+        grpc {
+            artifact = 'io.grpc:protoc-gen-grpc-java:1.25.0'
+        }
+    }
+
+    generateProtoTasks {
+        all()*.plugins {
+            grpc {}
+        }
+    }
+}
+
+java {
+//    sourceCompatibility = JavaVersion.VERSION_1_8
+//    targetCompatibility = JavaVersion.VERSION_1_8
+
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(8))
+    }
+}
 
 test {
     useJUnitPlatform()

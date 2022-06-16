@@ -1,0 +1,21 @@
+syntax = "proto3";
+package unimi.dsp.taxi;
+
+import "google/protobuf/empty.proto";
+
+message TaxiAddRequest {
+  int32 id = 1;
+  string ipAddress = 2;
+  int32 port = 3;
+  int32 x = 4;
+  int32 y = 5;
+}
+
+message TaxiRemoveRequest {
+  int32 id = 1;
+}
+
+service TaxiService {
+  rpc addTaxi(TaxiAddRequest) returns (google.protobuf.Empty);
+  rpc removeTaxi(TaxiRemoveRequest) returns (google.protobuf.Empty);
+}

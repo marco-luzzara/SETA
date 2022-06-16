@@ -13,9 +13,6 @@ import java.util.Objects;
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RideRequestDto {
-    private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
-    private static final int smartCityMaxWidth = configurationManager.getSmartCityWidth();
-    private static final int smartCityMaxHeight = configurationManager.getSmartCityHeight();
     private int id;
     private int xStart;
     private int yStart;
@@ -25,6 +22,10 @@ public class RideRequestDto {
     private RideRequestDto() {}
 
     public RideRequestDto(int id, SmartCityPosition start, SmartCityPosition end) {
+        if (start.equals(end)) {
+            throw new IllegalArgumentException("start and end must be different");
+        }
+
         this.id = id;
         this.xStart = start.x;
         this.yStart = start.y;
@@ -34,25 +35,6 @@ public class RideRequestDto {
 
     public int getId() {
         return id;
-    }
-
-//    public void setId(int id) {
-//        this.id = id;
-//    }
-
-    public District getDistrict() {
-        if (this.xStart < smartCityMaxWidth / 2) {
-            if (this.yStart < smartCityMaxHeight / 2)
-                return District.TOP_LEFT;
-            else
-                return District.TOP_RIGHT;
-        }
-        else {
-            if (this.yStart < smartCityMaxHeight / 2)
-                return District.BOTTOM_LEFT;
-            else
-                return District.BOTTOM_RIGHT;
-        }
     }
 
     public SmartCityPosition getStart() {
