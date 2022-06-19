@@ -11,11 +11,16 @@ message TaxiAddRequest {
   int32 y = 5;
 }
 
+message TaxiAddResponse {
+  int32 x = 1;
+  int32 y = 2;
+}
+
 message TaxiRemoveRequest {
   int32 id = 1;
 }
 
 service TaxiService {
-  rpc addTaxi(TaxiAddRequest) returns (google.protobuf.Empty);
+  rpc addTaxi(TaxiAddRequest) returns (TaxiAddResponse);
   rpc removeTaxi(TaxiRemoveRequest) returns (google.protobuf.Empty);
 }

@@ -13,16 +13,22 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         this.taxi = taxi;
     }
 
+    // the remote taxi presents to this taxi, and receives the coordinate of this taxi
     @Override
-    public void addTaxi(TaxiServiceOuterClass.TaxiAddRequest request, StreamObserver<Empty> responseObserver) {
-        this.taxi.addNewTaxi(request);
-        responseObserver.onNext(Empty.getDefaultInstance());
+    public void addTaxi(TaxiServiceOuterClass.TaxiAddRequest request,
+                        StreamObserver<TaxiServiceOuterClass.TaxiAddResponse> responseObserver) {
+        this.taxi.addRemoteTaxi(request);
+        responseObserver.onNext(
+                TaxiServiceOuterClass.TaxiAddResponse.newBuilder()
+                        .setX(taxi.getX())
+                        .setY(taxi.getY())
+                        .build());
         responseObserver.onCompleted();
     }
 
     @Override
     public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest request, StreamObserver<Empty> responseObserver) {
-        this.taxi.removeTaxi(request);
+        this.taxi.removeRemoteTaxi(request.getId());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }

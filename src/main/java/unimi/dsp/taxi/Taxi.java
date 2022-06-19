@@ -10,6 +10,8 @@ import io.grpc.ServerBuilder;
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.model.types.District;
+import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.taxi.grpc.services.TaxiService;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.RestUtils;
@@ -17,6 +19,7 @@ import unimi.dsp.util.RestUtils;
 import javax.ws.rs.core.Response;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 
 public class Taxi implements Closeable  {
@@ -26,12 +29,11 @@ public class Taxi implements Closeable  {
     private int batteryLevel;
     private int x;
     private int y;
-    private List<TaxiInfoDto> registeredTaxis;
+    private HashMap<Integer, NetworkTaxiConnection> networkTaxis;
     private TaxiStatus status;
 
     // for grpc communication
     private Server grpcServer;
-    private Channel grpcChannel;
 
     // for admin server communication
     private Client client;
@@ -43,16 +45,40 @@ public class Taxi implements Closeable  {
         this.port = port;
         this.batteryLevel = 100;
         this.status = TaxiStatus.GRPC_UNSTARTED;
+        this.networkTaxis = new HashMap<>();
 
+        // for rest register and unregister
         ClientConfig config = new DefaultClientConfig();
         config.getClasses().add(JacksonJaxbJsonProvider.class);
         client = Client.create(config);
-
-        this.grpcChannel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
     }
 
-    List<TaxiInfoDto> getRegisteredTaxis() {
-        return registeredTaxis;
+    public int getId() {
+        return id;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public int getX() {
+        return x;
+    }
+
+    public int getY() {
+        return y;
+    }
+
+    public District getDistrict() {
+        return District.fromPosition(new SmartCityPosition(this.x, this.y));
+    }
+
+    HashMap<Integer, NetworkTaxiConnection> getNetworkTaxiConnections() {
+        return networkTaxis;
     }
 
     public void enterInSETANetwork() {
@@ -60,6 +86,7 @@ public class Taxi implements Closeable  {
         this.status = TaxiStatus.GRPC_STARTED;
         this.registerToServer();
         this.status = TaxiStatus.TAXI_REGISTERED;
+        this.informOtherTaxisAboutEnteringTheNetwork();
     }
 
     void startGRPCServer()  {
@@ -82,29 +109,41 @@ public class Taxi implements Closeable  {
         });
         this.x = newTaxi.getX();
         this.y = newTaxi.getY();
-        this.registeredTaxis = newTaxi.getTaxiInfos();
+        for (TaxiInfoDto taxiInfoDto : newTaxi.getTaxiInfos()) {
+            this.networkTaxis.put(taxiInfoDto.getId(), new NetworkTaxiConnection(this, taxiInfoDto));
+        }
     }
 
-    void informOtherTaxis() {
-        //TaxiServiceGrpc.TaxiServiceStub stub = TaxiServiceGrpc.newStub(this.grpcChannel);
-
-
+    void informOtherTaxisAboutEnteringTheNetwork() {
+        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
+            taxiConnection.sendAddTaxi();
+        }
     }
 
-    public void addNewTaxi(TaxiServiceOuterClass.TaxiAddRequest taxiAddInfo) {
-        this.registeredTaxis.add(
-                new TaxiInfoDto(
-                        taxiAddInfo.getId(),
-                        taxiAddInfo.getIpAddress(),
-                        taxiAddInfo.getPort()
-                )
-        );
+    void informOtherTaxisAboutExitingFromTheNetwork() {
+        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
+            taxiConnection.sendRemoveTaxi();
+        }
+
+        this.networkTaxis = new HashMap<>();
     }
 
-    public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest taxiRemoveInfo) {
-        this.registeredTaxis.stream().filter(ti -> ti.getId() == taxiRemoveInfo.getId())
-                .findAny()
-                .ifPresent(this.registeredTaxis::remove);
+    // server callback after a new remote taxi informs this about its entrance in the network
+    public void addRemoteTaxi(TaxiServiceOuterClass.TaxiAddRequest taxiAddInfo) {
+        NetworkTaxiConnection taxiConnection = new NetworkTaxiConnection(this,
+                new TaxiInfoDto(this.getId(), this.getHost(), this.getPort())
+            );
+        taxiConnection.setRemoteTaxiDistrict(
+                District.fromPosition(new SmartCityPosition(
+                    taxiAddInfo.getX(), taxiAddInfo.getY()
+                )));
+
+        this.networkTaxis.put(taxiAddInfo.getId(), taxiConnection);
+    }
+
+    // server callback after a remote taxi informs this about its exit from the network
+    public void removeRemoteTaxi(int id) {
+        this.networkTaxis.remove(id);
     }
 
     private void unregisterFromServer() {
@@ -128,8 +167,12 @@ public class Taxi implements Closeable  {
     public void close() {
         if (this.status.isInOrAfter(TaxiStatus.GRPC_STARTED))
             this.stopGRPCServer();
-        if (this.status.isInOrAfter(TaxiStatus.TAXI_REGISTERED))
+        if (this.status.isInOrAfter(TaxiStatus.TAXI_REGISTERED)) {
             this.unregisterFromServer();
+            this.informOtherTaxisAboutExitingFromTheNetwork();
+        }
+
+        this.status = TaxiStatus.GRPC_UNSTARTED;
     }
 
     private enum TaxiStatus {

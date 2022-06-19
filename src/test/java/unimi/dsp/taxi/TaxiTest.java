@@ -16,7 +16,7 @@ public class TaxiTest {
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1)) {
             taxi.enterInSETANetwork();
 
-            assertEquals(0, taxi.getRegisteredTaxis().size());
+            assertEquals(0, taxi.getNetworkTaxiConnections().size());
         }
     }
 
@@ -29,24 +29,32 @@ public class TaxiTest {
         }
     }
 
-//    @Test
-//    public void givenManyTaxis_WhenTheSecondIsRegistered_ThenItReceivesTheAlreadyRegisteredTaxis()
-//            throws InterruptedException {
-//        try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxi2 = FakeTaxiFactory.getTaxi(2)) {
-//            taxi.enterInSETANetwork();
-//
-//            taxi2.enterInSETANetwork();
-//
-//            Thread.sleep(1000);
-//            assertEquals(1, taxi.getRegisteredTaxis().size());
-//            assertEquals(1, taxi2.getRegisteredTaxis().size());
-//        }
-//    }
+    @Test
+    public void givenManyTaxis_WhenTheSecondIsRegistered_ThenItReceivesTheAlreadyRegisteredTaxis()
+            throws InterruptedException {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxi2 = FakeTaxiFactory.getTaxi(2)) {
+            taxi.enterInSETANetwork();
 
+            taxi2.enterInSETANetwork();
+
+            assertEquals(1, taxi.getNetworkTaxiConnections().size());
+            assertEquals(1, taxi2.getNetworkTaxiConnections().size());
+        }
+    }
 
     @Test
-    public void givenARegisteredTaxi_WhenNewTaxiEnterInNetwork_ThenItIsPresentedToTheOthers() {
+    public void givenManyTaxis_WhenTheSecondExits_ThenTheLastOneRemovesItFromItsNetwork()
+            throws InterruptedException {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxi2 = FakeTaxiFactory.getTaxi(2)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
 
+            taxi2.close();
+
+            // sleep is necessary here because the grpc stub is async
+            Thread.sleep(1000);
+            assertEquals(0, taxi.getNetworkTaxiConnections().size());
+        }
     }
 
 //    @AfterEach
