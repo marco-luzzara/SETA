@@ -58,4 +58,15 @@ public class ConfigurationManager {
     public String getRideRequestTopicPrefix() {
         return props.getProperty("rideRequestTopicPrefix");
     }
+    public String getRideConfirmationTopicSuffix() {
+        return props.getProperty("rideConfirmationTopicSuffix");
+    }
+
+    public int getNumDistricts() {
+        return Integer.parseInt(props.getProperty("numDistricts"));
+    }
+
+    public int getRideRequestTimeout() {
+        return Integer.parseInt(props.getProperty("rideRequestTimeout"));
+    }
 }

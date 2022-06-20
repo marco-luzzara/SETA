@@ -1,6 +1,8 @@
 package unimi.dsp.SETA;
 
 import com.google.gson.Gson;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.paho.client.mqttv3.*;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
@@ -9,6 +11,7 @@ import unimi.dsp.fakeFactories.RidePositionGeneratorFactory;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
+import unimi.dsp.util.SerializationUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -16,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /*
@@ -34,17 +38,16 @@ public class SetaSystemTest {
     @Test
     public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() throws MqttException {
         runWithinClient(client -> {
-            try {
+            try (SetaSystem ss = new SetaSystem(
+                    RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
+                    1, 1, 1, 2000, 2)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
-                    String content = new String(message.getPayload(), StandardCharsets.UTF_8);
-                    RideRequestDto rideRequest = new Gson().fromJson(content, RideRequestDto.class);
+                    RideRequestDto rideRequest = SerializationUtil.deserialize(
+                            message.getPayload(), RideRequestDto.class);
 
                     assertEquals(new SmartCityPosition(0, 0), rideRequest.getStart());
                 }));
-                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "1", 2);
-                SetaSystem ss = new SetaSystem(
-                        RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                        1, 1, 1, 2);
+                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district1", 2);
 
                 ss.run();
 
@@ -59,26 +62,47 @@ public class SetaSystemTest {
     }
 
     @Test
-    public void givenManyRideRequest_WhenSETARun_MQTTSubSeeAllRides() throws MqttException {
+    public void givenASingleRideRequest_WhenTimeoutExpires_ItIsResentAfterAWhile() throws MqttException {
         runWithinClient(client -> {
-            try {
+            try (SetaSystem ss = new SetaSystem(
+                    RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
+                    1, 1, 1, 1500, 2)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
-                    String content = new String(message.getPayload(), StandardCharsets.UTF_8);
-                    RideRequestDto rideRequest = new Gson().fromJson(content, RideRequestDto.class);
+                    RideRequestDto rideRequest = SerializationUtil.deserialize(
+                            message.getPayload(), RideRequestDto.class);
 
-                    if (counter == 1)
-                        assertEquals(0, rideRequest.getId());
-                    else
-                        assertEquals(1, rideRequest.getId());
+                    assertEquals(new SmartCityPosition(0, 0), rideRequest.getStart());
                 }));
-                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "1", 2);
-                SetaSystem ss = new SetaSystem(
-                        RidePositionGeneratorFactory.getGenerator(
-                                new RideRequestDto(0,
-                                        new SmartCityPosition(0, 0), new SmartCityPosition(0, 1)),
-                                new RideRequestDto(1,
-                                        new SmartCityPosition(1, 2), new SmartCityPosition(3, 4))),
-                        2, 10, 1, 2);
+                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district1", 2);
+
+                ss.run();
+
+                token.waitForCompletion();
+                Thread.sleep(3000);
+            } catch (MqttException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        // the real check is here because i make sure that I receive 2 equal requests
+        assertCallbacksSuccessful(2);
+    }
+
+    @Test
+    public void givenManyRideRequest_WhenSETARun_MQTTSubSeeAllRides() {
+        List<RideRequestDto> rideRequestsArrived = new ArrayList<>();
+        runWithinClient(client -> {
+            try (SetaSystem ss = new SetaSystem(
+                    RidePositionGeneratorFactory.getGenerator(
+                            RidePositionGeneratorFactory.getRideRequest(0, 0, 0, 1),
+                            RidePositionGeneratorFactory.getRideRequest(1, 2, 3, 4)),
+                    2, 10, 1, 2000, 2)){
+                client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
+                    RideRequestDto rideRequest = SerializationUtil.deserialize(
+                            message.getPayload(), RideRequestDto.class);
+                    rideRequestsArrived.add(rideRequest);
+                }));
+                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district1", 2);
 
                 ss.run();
 
@@ -90,6 +114,7 @@ public class SetaSystemTest {
         });
 
         assertCallbacksSuccessful(2);
+        assertThat(rideRequestsArrived.stream().mapToInt(RideRequestDto::getId)).contains(0, 1);
     }
 
     private void assertCallbacksSuccessful(int messagesNum) {
@@ -99,6 +124,7 @@ public class SetaSystemTest {
                     sb.toString());
         }
         catch (AssertionFailedError err) {
+            sinkedException.addSuppressed(err);
             throw sinkedException;
         }
     }

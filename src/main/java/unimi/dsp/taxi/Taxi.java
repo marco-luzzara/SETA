@@ -3,8 +3,6 @@ package unimi.dsp.taxi;
 import com.sun.jersey.api.client.*;
 import com.sun.jersey.api.client.config.ClientConfig;
 import com.sun.jersey.api.client.config.DefaultClientConfig;
-import io.grpc.Channel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider;
@@ -14,13 +12,12 @@ import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.taxi.grpc.services.TaxiService;
 import unimi.dsp.util.ConfigurationManager;
-import unimi.dsp.util.RestUtils;
+import unimi.dsp.util.RestUtil;
 
 import javax.ws.rs.core.Response;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 
 public class Taxi implements Closeable  {
     private int id;
@@ -101,7 +98,7 @@ public class Taxi implements Closeable  {
     }
 
     void registerToServer() {
-        ClientResponse response = RestUtils.postRequest(client, serverEndpoint + "/taxis",
+        ClientResponse response = RestUtil.postRequest(client, serverEndpoint + "/taxis",
                 new TaxiInfoDto(this.id, this.host, this.port));
         if (response.getStatus() == Response.Status.CONFLICT.getStatusCode())
             throw new IllegalStateException("Taxi cannot register because another taxi has the same id");
@@ -152,7 +149,7 @@ public class Taxi implements Closeable  {
         config.getClasses().add(JacksonJaxbJsonProvider.class);
         Client client = Client.create(config);
 
-        ClientResponse response = RestUtils.sendDeleteRequest(client,
+        ClientResponse response = RestUtil.sendDeleteRequest(client,
                 serverEndpoint + "/taxis/" + this.id);
         int statusCode = response.getStatus();
         if (statusCode != Response.Status.OK.getStatusCode())

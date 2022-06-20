@@ -1,13 +1,10 @@
 package unimi.dsp.dto;
 
-import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
-import unimi.dsp.util.ConfigurationManager;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
-import javax.xml.bind.annotation.XmlTransient;
 import java.util.Objects;
 
 @XmlRootElement
@@ -50,13 +47,12 @@ public class RideRequestDto {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         RideRequestDto that = (RideRequestDto) o;
-        return id == that.id && xStart == that.xStart && yStart == that.yStart &&
-                xEnd == that.xEnd && yEnd == that.yEnd;
+        return id == that.id;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, xStart, yStart, xEnd, yEnd);
+        return Objects.hash(id);
     }
 
     @Override

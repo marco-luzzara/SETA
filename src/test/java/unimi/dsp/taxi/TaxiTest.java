@@ -51,7 +51,7 @@ public class TaxiTest {
 
             taxi2.close();
 
-            // sleep is necessary here because the grpc stub is async
+            // sleep is necessary here because the grpc stub is async when taxi exits
             Thread.sleep(1000);
             assertEquals(0, taxi.getNetworkTaxiConnections().size());
         }

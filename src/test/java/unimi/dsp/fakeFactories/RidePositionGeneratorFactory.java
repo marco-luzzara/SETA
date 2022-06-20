@@ -8,10 +8,16 @@ import java.util.List;
 import java.util.Map;
 
 public class RidePositionGeneratorFactory {
-    public static SetaSystem.RideGenerator getGenerator(int xStart, int yStart, int xEnd, int yEnd) {
-        return () -> new RideRequestDto(0,
+    private static int rideRequestCounter = -1;
+    public static RideRequestDto getRideRequest(int xStart, int yStart, int xEnd, int yEnd) {
+        rideRequestCounter++;
+        return new RideRequestDto(rideRequestCounter,
                 new SmartCityPosition(xStart, yStart),
                 new SmartCityPosition(xEnd, yEnd));
+    }
+
+    public static SetaSystem.RideGenerator getGenerator(int xStart, int yStart, int xEnd, int yEnd) {
+        return () -> RidePositionGeneratorFactory.getRideRequest(xStart, yStart, xEnd, yEnd);
     }
 
     /**

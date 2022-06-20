@@ -55,7 +55,12 @@ dependencies {
     // https://mvnrepository.com/artifact/org.eclipse.paho/org.eclipse.paho.client.mqttv3
     implementation group: 'org.eclipse.paho', name: 'org.eclipse.paho.client.mqttv3', version: '1.2.5'
 
+    // Log4J
+    implementation 'org.apache.logging.log4j:log4j-api:2.8'
+    implementation 'org.apache.logging.log4j:log4j-core:2.8'
+
     testImplementation "org.mockito:mockito-core:4.5.1"
+    testImplementation "org.assertj:assertj-core:3.23.1"
     testImplementation 'org.junit.jupiter:junit-jupiter:5.8.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
@@ -104,9 +109,6 @@ protobuf {
 }
 
 java {
-//    sourceCompatibility = JavaVersion.VERSION_1_8
-//    targetCompatibility = JavaVersion.VERSION_1_8
-
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(8))
     }

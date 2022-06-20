@@ -8,9 +8,8 @@ import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsAvgReportDto;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.DateTimeUtil;
-import unimi.dsp.util.RestUtils;
+import unimi.dsp.util.RestUtil;
 
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
@@ -74,7 +73,7 @@ public class UserClient {
     }
 
     private static void enterGetAllTaxisFlow(Client client, String serverAddress) {
-        ClientResponse response = RestUtils.sendGetRequest(client, serverAddress + "/taxis");
+        ClientResponse response = RestUtil.sendGetRequest(client, serverAddress + "/taxis");
         printResponseBody(response, new GenericType<List<TaxiInfoDto>>() {});
     }
 
@@ -96,7 +95,7 @@ public class UserClient {
             return;
         }
 
-        ClientResponse response = RestUtils.sendGetRequest(client,
+        ClientResponse response = RestUtil.sendGetRequest(client,
                 serverAddress + String.format("/taxis/%d/statistics/report?n=%d", taxiId, n));
 
         if (response.getStatus() == Response.Status.NOT_FOUND.getStatusCode()) {
@@ -128,7 +127,7 @@ public class UserClient {
                 String.format("/taxis/statistics/report?tsStart=%s&tsEnd=%s",
                         DateTimeUtil.getStringFromOffsetDateTime(tsStart),
                         DateTimeUtil.getStringFromOffsetDateTime(tsEnd));
-        ClientResponse response = RestUtils.sendGetRequest(client,url);
+        ClientResponse response = RestUtil.sendGetRequest(client,url);
 
         printResponseBody(response, new GenericType<TaxiStatisticsAvgReportDto>() {});
     }

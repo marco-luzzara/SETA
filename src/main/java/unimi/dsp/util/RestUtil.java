@@ -8,7 +8,7 @@ import com.sun.jersey.api.client.WebResource;
 import javax.ws.rs.core.MediaType;
 import java.util.function.Supplier;
 
-public class RestUtils {
+public class RestUtil {
     public static ClientResponse sendGetRequest(Client client, String url){
         return wrapWithExceptionHandler(() -> {
             WebResource webResource = client.resource(url);
