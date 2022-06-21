@@ -1,7 +1,5 @@
 package unimi.dsp.dto;
 
-import unimi.dsp.model.types.SmartCityPosition;
-
 import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Objects;
 

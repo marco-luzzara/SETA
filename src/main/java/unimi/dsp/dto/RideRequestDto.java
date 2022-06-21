@@ -11,6 +11,7 @@ import java.util.Objects;
 @XmlAccessorType(XmlAccessType.FIELD)
 public class RideRequestDto {
     private int id;
+    private long timestamp;
     private int xStart;
     private int yStart;
     private int xEnd;
@@ -28,6 +29,7 @@ public class RideRequestDto {
         this.yStart = start.y;
         this.xEnd = end.x;
         this.yEnd = end.y;
+        this.timestamp = System.currentTimeMillis();
     }
 
     public int getId() {
@@ -40,6 +42,14 @@ public class RideRequestDto {
 
     public SmartCityPosition getEnd() {
         return new SmartCityPosition(xEnd, yEnd);
+    }
+
+    public long getTimestamp() {
+        return timestamp;
+    }
+
+    public void resetTimestamp() {
+        this.timestamp = System.currentTimeMillis();
     }
 
     @Override

@@ -1,7 +1,6 @@
 package unimi.dsp.util;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Properties;
 
@@ -68,5 +67,18 @@ public class ConfigurationManager {
 
     public int getRideRequestTimeout() {
         return Integer.parseInt(props.getProperty("rideRequestTimeout"));
+    }
+
+    public int getRideDeliveryDelay() {
+        return Integer.parseInt(props.getProperty("rideDeliveryDelay"));
+    }
+    public int getBatteryConsumptionPerKm() {
+        return Integer.parseInt(props.getProperty("batteryConsumptionPerKm"));
+    }
+    public int getBatteryThresholdBeforeRecharge() {
+        return Integer.parseInt(props.getProperty("batteryThresholdBeforeRecharge"));
+    }
+    public int getRechargeDelay() {
+        return Integer.parseInt(props.getProperty("rechargeDelay"));
     }
 }

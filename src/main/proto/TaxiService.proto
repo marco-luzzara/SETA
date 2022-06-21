@@ -20,7 +20,36 @@ message TaxiRemoveRequest {
   int32 id = 1;
 }
 
+message TaxiNewDistrictRequest {
+  int32 id = 1;
+  int32 newX = 2;
+  int32 newY = 3;
+}
+
+message ElectionInfoRequest {
+  int32 rideRequestId = 1;
+  int32 taxiId = 2;
+  double distanceFromSP = 3;
+  int32 batteryLevel = 4;
+  int64 rideRequestTimestamp = 5;
+}
+
+message RideRequestApprovalResponse {
+  bool isApproved = 1;
+}
+
+message RideRequestUpdateRequest {
+  int32 rideRequestId = 1;
+  int32 taxiId = 2;
+  // if true, then it is already taken by another taxi, otherwise it is like an OK message,
+  // so the ride request is still available
+  bool isAlreadyConfirmed = 3;
+}
+
 service TaxiService {
   rpc addTaxi(TaxiAddRequest) returns (TaxiAddResponse);
   rpc removeTaxi(TaxiRemoveRequest) returns (google.protobuf.Empty);
+  rpc changeRemoteTaxiDistrict(TaxiNewDistrictRequest) returns (google.protobuf.Empty);
+  rpc askRideRequestApproval(ElectionInfoRequest) returns (RideRequestApprovalResponse);
+  rpc updateRideRequestApproval(RideRequestUpdateRequest) returns (google.protobuf.Empty);
 }

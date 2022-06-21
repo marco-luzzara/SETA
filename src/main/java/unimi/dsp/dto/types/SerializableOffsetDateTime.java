@@ -5,7 +5,7 @@ import unimi.dsp.util.DateTimeUtil;
 import java.time.OffsetDateTime;
 
 public class SerializableOffsetDateTime {
-    private OffsetDateTime odt;
+    private final OffsetDateTime odt;
 
     public SerializableOffsetDateTime(String odtString) {
         this.odt = DateTimeUtil.getOffsetDateTimeFromString(odtString);

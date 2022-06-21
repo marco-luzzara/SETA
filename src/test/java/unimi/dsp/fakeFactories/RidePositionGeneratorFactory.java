@@ -4,9 +4,6 @@ import unimi.dsp.SETA.SetaSystem;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.SmartCityPosition;
 
-import java.util.List;
-import java.util.Map;
-
 public class RidePositionGeneratorFactory {
     public static RideRequestDto getRideRequest(int xStart, int yStart, int xEnd, int yEnd) {
         return getRideRequest(0, xStart, yStart, xEnd, yEnd);

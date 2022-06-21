@@ -12,7 +12,6 @@ import unimi.dsp.util.MQTTClientFactory;
 import unimi.dsp.util.SerializationUtil;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.*;
 
 public class SetaSystem implements Closeable {
@@ -46,7 +45,7 @@ public class SetaSystem implements Closeable {
                       int genFrequencyMillis,
                       int numGeneratedRequest,
                       int rideRequestTimeout,
-                      int qos) throws MqttException {
+                      int qos) {
         this.rideGenerator = rideGenerator;
         this.requestLimit = requestLimit;
         this.genFrequencyMillis = genFrequencyMillis;
@@ -123,8 +122,9 @@ public class SetaSystem implements Closeable {
 
                 synchronized (pendingRideRequestsSet) {
                     if (pendingRideRequestsSet.contains(this.rideRequest.getId())) {
-                        logger.info("Ride request with Id {} has been regenerated (cause: idleness)",
+                        logger.info("Ride request with Id {} will be sente again (cause: idleness)",
                                 this.rideRequest.getId());
+                        this.rideRequest.resetTimestamp();
                         Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap.get(this.district);
                         synchronized (newRideRequestsSet) {
                             newRideRequestsSet.add(this.rideRequest);
@@ -191,7 +191,7 @@ public class SetaSystem implements Closeable {
         }
     }
 
-    void addToNewRideRequests(RideRequestDto rideRequest) throws MqttException {
+    void addToNewRideRequests(RideRequestDto rideRequest) {
         District district = District.fromPosition(rideRequest.getStart());
         Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap
                 .get(Integer.parseInt(district.toString()));
@@ -210,8 +210,8 @@ public class SetaSystem implements Closeable {
 
             @Override
             public void messageArrived(String topic, MqttMessage message) {
-                if (!topic.startsWith(configurationManager.getRideRequestTopicPrefix()) ||
-                        !topic.endsWith(configurationManager.getRideConfirmationTopicSuffix()))
+                if (!topic.startsWith(RIDE_REQUEST_TOPIC_PREFIX) ||
+                        !topic.endsWith(RIDE_CONFIRM_TOPIC_SUFFIX))
                     return;
 
                 RideConfirmDto rideConfirm = SerializationUtil.deserialize(
@@ -274,10 +274,10 @@ public class SetaSystem implements Closeable {
             }
         };
 
-        SetaSystem ss = new SetaSystem(rideGenerator, 0,
-                generationFrequencyMillis, numGeneratedRequest, rideRequestTimeout, 1);
-
-        ss.run();
+        try (SetaSystem ss = new SetaSystem(rideGenerator, 0,
+                generationFrequencyMillis, numGeneratedRequest, rideRequestTimeout, 1)) {
+            ss.run();
+        }
     }
 
     public interface RideGenerator {

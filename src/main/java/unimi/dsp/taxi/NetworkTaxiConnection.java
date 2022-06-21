@@ -1,20 +1,24 @@
 package unimi.dsp.taxi;
 
 import com.google.protobuf.Empty;
-import io.grpc.Channel;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 
-import java.util.Objects;
+import java.util.Map;
 import java.util.Optional;
 
 public class NetworkTaxiConnection {
-    private Taxi taxi;
-    private TaxiInfoDto remoteTaxiInfo;
+    private static final Logger logger = LogManager.getLogger(NetworkTaxiConnection.class.getName());
+
+    private final Taxi taxi;
+    private final TaxiInfoDto remoteTaxiInfo;
     private District remoteTaxiDistrict;
     private Optional<ManagedChannel> channel;
 
@@ -24,31 +28,16 @@ public class NetworkTaxiConnection {
         this.channel = Optional.empty();
     }
 
-//    public int getId() {
-//        return id;
-//    }
-//    public void setId(int id) {
-//        this.id = id;
-//    }
-//
-//    public String getIpAddress() {
-//        return ipAddress;
-//    }
-//    public void setIpAddress(String ipAddress) {
-//        this.ipAddress = ipAddress;
-//    }
-//
-//    public int getPort() {
-//        return port;
-//    }
-//    public void setPort(int port) {
-//        this.port = port;
-//    }
-
+    public District getRemoteTaxiDistrict() {
+        return remoteTaxiDistrict;
+    }
 
     public void setRemoteTaxiDistrict(District remoteTaxiDistrict) {
         this.remoteTaxiDistrict = remoteTaxiDistrict;
+        this.openChannelBasedOnDistrict();
+    }
 
+    private void openChannelBasedOnDistrict() {
         if (remoteTaxiDistrict.equals(this.taxi.getDistrict()))
             this.openChannelIfNecessary();
         else
@@ -91,6 +80,19 @@ public class NetworkTaxiConnection {
         this.setRemoteTaxiDistrict(remoteDistrict);
     }
 
+    public void sendLocalDistrictChanged() {
+        this.openChannelIfNecessary();
+
+        TaxiServiceOuterClass.TaxiNewDistrictRequest request = TaxiServiceOuterClass.TaxiNewDistrictRequest
+                .newBuilder()
+                .setId(this.taxi.getId())
+                .setNewX(this.taxi.getX()).setNewY(this.taxi.getY())
+                .build();
+
+        TaxiServiceGrpc.newBlockingStub(channel.get()).changeRemoteTaxiDistrict(request);
+        this.openChannelBasedOnDistrict();
+    }
+
     public void sendRemoveTaxi() {
         this.openChannelIfNecessary();
 
@@ -112,5 +114,73 @@ public class NetworkTaxiConnection {
                 closeChannelIfNecessary();
             }
         });
+    }
+
+    public void sendAskRideRequestApproval(RideRequestDto rideRequest) {
+        // I am sending a ride request approval from my district
+        assert this.channel.isPresent();
+
+        TaxiServiceOuterClass.ElectionInfoRequest request = TaxiServiceOuterClass.ElectionInfoRequest.newBuilder()
+                .setRideRequestId(rideRequest.getId())
+                .setTaxiId(this.taxi.getId())
+                .setDistanceFromSP(this.taxi.getDistanceFromRideStart(rideRequest))
+                .setBatteryLevel(this.taxi.getBatteryLevel())
+                .setRideRequestTimestamp(rideRequest.getTimestamp())
+                .build();
+        TaxiServiceGrpc.newStub(this.channel.get()).askRideRequestApproval(request,
+                new StreamObserver<TaxiServiceOuterClass.RideRequestApprovalResponse>() {
+                    @Override
+                    public void onNext(TaxiServiceOuterClass.RideRequestApprovalResponse value) {
+                        Map<RideRequestDto, Map<Integer, Boolean>> rideRequestsMap = taxi.getRideRequestElectionsMap();
+                        // I have to synchronize on the whole map because in the meantime the taxi could exit
+                        // and the ride request key might be removed
+                        synchronized (rideRequestsMap) {
+                            Optional<RideRequestDto> optRideRequest = rideRequestsMap.keySet()
+                                    .stream().filter(rr -> rr.getId() == request.getRideRequestId())
+                                    .findAny();
+
+                            optRideRequest.ifPresent(rr -> {
+                                rideRequestsMap.get(rr).put(remoteTaxiInfo.getId(), value.getIsApproved());
+                                if (value.getIsApproved())
+                                    taxi.takeRideIfPossible(rr);
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        logger.error(
+                                String.format("Error while taxi %s is sending ride request approval to taxi %s",
+                                    taxi.getId(), remoteTaxiInfo.getId()), t);
+                    }
+
+                    @Override
+                    public void onCompleted() {}
+                }
+        );
+    }
+
+    //
+    public void sendUpdateRideRequestApproval(RideRequestDto rideRequest, boolean isAlreadyConfirmed) {
+        TaxiServiceOuterClass.RideRequestUpdateRequest request = TaxiServiceOuterClass.RideRequestUpdateRequest
+                .newBuilder()
+                .setRideRequestId(rideRequest.getId())
+                .setTaxiId(this.taxi.getId())
+                .setIsAlreadyConfirmed(isAlreadyConfirmed)
+                .build();
+        TaxiServiceGrpc.newStub(this.channel.get()).updateRideRequestApproval(request,
+                new StreamObserver<Empty>() {
+                    @Override
+                    public void onNext(Empty value) {
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        logger.error("Error while updating ride request approval", t);
+                    }
+
+                    @Override
+                    public void onCompleted() {}
+                });
     }
 }

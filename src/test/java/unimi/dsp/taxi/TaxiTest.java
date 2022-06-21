@@ -1,18 +1,15 @@
 package unimi.dsp.taxi;
 
-import org.junit.jupiter.api.AfterEach;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import org.junit.jupiter.api.Test;
 import unimi.dsp.fakeFactories.FakeTaxiFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class TaxiTest {
     @Test
-    public void givenSingleTaxi_WhenRegistered_ThenReturnRegisteredTaxi() {
+    public void givenSingleTaxi_WhenRegistered_ThenReturnRegisteredTaxi() throws MqttException {
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1)) {
             taxi.enterInSETANetwork();
 
@@ -21,7 +18,7 @@ public class TaxiTest {
     }
 
     @Test
-    public void givenManyTaxisWithSameId_WhenDuplicateTaxiRegister_ThenThrow() {
+    public void givenManyTaxisWithSameId_WhenDuplicateTaxiRegister_ThenThrow() throws MqttException {
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxiDup = FakeTaxiFactory.getTaxi(1)) {
             taxi.enterInSETANetwork();
 
@@ -31,7 +28,7 @@ public class TaxiTest {
 
     @Test
     public void givenManyTaxis_WhenTheSecondIsRegistered_ThenItReceivesTheAlreadyRegisteredTaxis()
-            throws InterruptedException {
+            throws MqttException {
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxi2 = FakeTaxiFactory.getTaxi(2)) {
             taxi.enterInSETANetwork();
 
@@ -44,7 +41,7 @@ public class TaxiTest {
 
     @Test
     public void givenManyTaxis_WhenTheSecondExits_ThenTheLastOneRemovesItFromItsNetwork()
-            throws InterruptedException {
+            throws InterruptedException, MqttException {
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1); Taxi taxi2 = FakeTaxiFactory.getTaxi(2)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
@@ -56,9 +53,4 @@ public class TaxiTest {
             assertEquals(0, taxi.getNetworkTaxiConnections().size());
         }
     }
-
-//    @AfterEach
-//    public void cleanUp() throws InterruptedException {
-//        Thread.sleep(500);
-//    }
 }

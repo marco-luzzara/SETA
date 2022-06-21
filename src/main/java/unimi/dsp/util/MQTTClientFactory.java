@@ -6,8 +6,6 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
-import java.io.IOException;
-
 public class MQTTClientFactory {
     private static final ConfigurationManager configManager;
     private static final String brokerUri;
@@ -17,15 +15,19 @@ public class MQTTClientFactory {
         brokerUri = configManager.getBrokerEndpoint();
     }
 
-    public static MqttAsyncClient getClient() throws MqttException {
-        String clientId = MqttClient.generateClientId();
-        MqttAsyncClient client = new MqttAsyncClient(brokerUri, clientId, new MemoryPersistence());
+    public static MqttAsyncClient getClient() {
+        try {
+            String clientId = MqttClient.generateClientId();
+            MqttAsyncClient client = new MqttAsyncClient(brokerUri, clientId, new MemoryPersistence());
 
-        MqttConnectOptions connOpts = new MqttConnectOptions();
-        connOpts.setCleanSession(true);
-        connOpts.setAutomaticReconnect(true);
-        client.connect(connOpts).waitForCompletion();
+            MqttConnectOptions connOpts = new MqttConnectOptions();
+            connOpts.setCleanSession(true);
+            connOpts.setAutomaticReconnect(true);
+            client.connect(connOpts).waitForCompletion();
 
-        return client;
+            return client;
+        } catch (MqttException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

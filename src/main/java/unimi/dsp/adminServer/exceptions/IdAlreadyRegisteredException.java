@@ -1,7 +1,7 @@
 package unimi.dsp.adminServer.exceptions;
 
 public class IdAlreadyRegisteredException extends Exception {
-    private int id;
+    private final int id;
     public IdAlreadyRegisteredException(int id) {
         this.id = id;
     }

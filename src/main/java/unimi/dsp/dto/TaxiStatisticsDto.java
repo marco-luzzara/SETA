@@ -3,9 +3,8 @@ package unimi.dsp.dto;
 import unimi.dsp.dto.types.SerializableOffsetDateTime;
 
 import javax.xml.bind.annotation.XmlRootElement;
-import java.util.List;
-import java.util.Objects;
 import java.time.OffsetDateTime;
+import java.util.Objects;
 
 @XmlRootElement
 public class TaxiStatisticsDto {

@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /*
 requirements: sudo service mosquitto start
@@ -25,17 +26,17 @@ requirements: sudo service mosquitto start
 public class SetaSystemTest {
     // at the end of each test I check if "OK" has been written in this sb. this is an easy way
     // to verify if the test was successful, given that assertions exceptions are sinked in threads.
-    private StringBuilder sb = new StringBuilder();
+    private final StringBuilder sb = new StringBuilder();
     // this exception includes all the sinked exceptions coming from threads.
     // in the catch clause the caught exception is added as suppressed
-    private RuntimeException sinkedException = new RuntimeException();
+    private final RuntimeException sinkedException = new RuntimeException();
     private static final String RIDE_REQUEST_TOPIC_PREFIX = ConfigurationManager
             .getInstance().getRideRequestTopicPrefix();
     private static final String RIDE_CONFIRM_TOPIC_SUFFIX = ConfigurationManager
             .getInstance().getRideConfirmationTopicSuffix();
 
     @Test
-    public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() throws MqttException {
+    public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
@@ -61,7 +62,8 @@ public class SetaSystemTest {
     }
 
     @Test
-    public void givenASingleRideRequest_WhenTimeoutExpires_ItIsResentAfterAWhile() throws MqttException {
+    public void givenASingleRideRequest_WhenTimeoutExpires_ItIsResentAfterAWhile() {
+        List<Long> timestamps = new ArrayList<>();
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
@@ -70,6 +72,7 @@ public class SetaSystemTest {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
 
+                    timestamps.add(rideRequest.getTimestamp());
                     assertEquals(new SmartCityPosition(0, 0), rideRequest.getStart());
                 }));
                 IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district1", 2);
@@ -77,7 +80,7 @@ public class SetaSystemTest {
                 ss.run();
 
                 token.waitForCompletion();
-                Thread.sleep(3000);
+                Thread.sleep(2000);
             } catch (MqttException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -85,10 +88,11 @@ public class SetaSystemTest {
 
         // the real check is here because i make sure that I receive 2 equal requests
         assertCallbacksSuccessful(2);
+        assertNotEquals(timestamps.get(0), timestamps.get(1));
     }
 
     @Test
-    public void givenASingleRideRequest_WhenConfirmationArrives_ItIsRemovedFromNewRides() throws MqttException {
+    public void givenASingleRideRequest_WhenConfirmationArrives_ItIsRemovedFromNewRides() {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),

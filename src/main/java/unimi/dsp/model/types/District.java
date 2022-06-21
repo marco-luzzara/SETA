@@ -8,7 +8,7 @@ public enum District {
     BOTTOM_LEFT(3),
     BOTTOM_RIGHT(4);
 
-    private int districtValue;
+    private final int districtValue;
     District(int districtValue) {
         this.districtValue = districtValue;
     }

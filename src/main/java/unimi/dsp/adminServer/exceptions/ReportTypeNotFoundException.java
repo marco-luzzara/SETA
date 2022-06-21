@@ -3,7 +3,7 @@ package unimi.dsp.adminServer.exceptions;
 import unimi.dsp.model.types.TaxiStatisticsReportType;
 
 public class ReportTypeNotFoundException extends Exception {
-    private TaxiStatisticsReportType reportType;
+    private final TaxiStatisticsReportType reportType;
 
     public ReportTypeNotFoundException(TaxiStatisticsReportType reportType) {
         this.reportType = reportType;

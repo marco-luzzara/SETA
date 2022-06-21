@@ -1,7 +1,6 @@
 package unimi.dsp.util;
 
 import com.google.gson.Gson;
-import unimi.dsp.dto.RideRequestDto;
 
 import java.nio.charset.StandardCharsets;
 

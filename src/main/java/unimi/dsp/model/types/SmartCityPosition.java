@@ -5,9 +5,9 @@ import unimi.dsp.util.ConfigurationManager;
 import java.util.Objects;
 
 public class SmartCityPosition {
-    private static ConfigurationManager configurationManager;
-    private static int maxWidth;
-    private static int maxHeight;
+    private static final ConfigurationManager configurationManager;
+    private static final int maxWidth;
+    private static final int maxHeight;
 
     static {
         configurationManager = ConfigurationManager.getInstance();
