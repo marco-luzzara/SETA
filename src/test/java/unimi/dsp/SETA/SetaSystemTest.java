@@ -1,11 +1,9 @@
 package unimi.dsp.SETA;
 
-import com.google.gson.Gson;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.eclipse.paho.client.mqttv3.*;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
+import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.fakeFactories.RidePositionGeneratorFactory;
 import unimi.dsp.model.types.SmartCityPosition;
@@ -13,7 +11,6 @@ import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
 import unimi.dsp.util.SerializationUtil;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -34,6 +31,8 @@ public class SetaSystemTest {
     private RuntimeException sinkedException = new RuntimeException();
     private static final String RIDE_REQUEST_TOPIC_PREFIX = ConfigurationManager
             .getInstance().getRideRequestTopicPrefix();
+    private static final String RIDE_CONFIRM_TOPIC_SUFFIX = ConfigurationManager
+            .getInstance().getRideConfirmationTopicSuffix();
 
     @Test
     public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() throws MqttException {
@@ -89,13 +88,43 @@ public class SetaSystemTest {
     }
 
     @Test
+    public void givenASingleRideRequest_WhenConfirmationArrives_ItIsRemovedFromNewRides() throws MqttException {
+        runWithinClient(client -> {
+            try (SetaSystem ss = new SetaSystem(
+                    RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
+                    1, 1, 1, 1500, 2)) {
+                client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
+                    RideRequestDto rideRequest = SerializationUtil.deserialize(
+                            message.getPayload(), RideRequestDto.class);
+
+                    assertEquals(new SmartCityPosition(0, 0), rideRequest.getStart());
+                }));
+                IMqttToken token = client.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district1", 2);
+
+                ss.run();
+                Thread.sleep(500);
+
+                client.publish(RIDE_REQUEST_TOPIC_PREFIX + "/district1" + RIDE_CONFIRM_TOPIC_SUFFIX,
+                        SerializationUtil.serialize(new RideConfirmDto(0)), 2, false);
+
+                Thread.sleep(1500);
+            } catch (MqttException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        // only a message is received because the ride is not re-published
+        assertCallbacksSuccessful(1);
+    }
+
+    @Test
     public void givenManyRideRequest_WhenSETARun_MQTTSubSeeAllRides() {
         List<RideRequestDto> rideRequestsArrived = new ArrayList<>();
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(
-                            RidePositionGeneratorFactory.getRideRequest(0, 0, 0, 1),
-                            RidePositionGeneratorFactory.getRideRequest(1, 2, 3, 4)),
+                            RidePositionGeneratorFactory.getRideRequest(0, 0, 0, 0, 1),
+                            RidePositionGeneratorFactory.getRideRequest(1, 1, 2, 3, 4)),
                     2, 10, 1, 2000, 2)){
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(

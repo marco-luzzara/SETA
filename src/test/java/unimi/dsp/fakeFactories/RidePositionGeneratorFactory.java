@@ -8,10 +8,12 @@ import java.util.List;
 import java.util.Map;
 
 public class RidePositionGeneratorFactory {
-    private static int rideRequestCounter = -1;
     public static RideRequestDto getRideRequest(int xStart, int yStart, int xEnd, int yEnd) {
-        rideRequestCounter++;
-        return new RideRequestDto(rideRequestCounter,
+        return getRideRequest(0, xStart, yStart, xEnd, yEnd);
+    }
+
+    public static RideRequestDto getRideRequest(int rideId, int xStart, int yStart, int xEnd, int yEnd) {
+        return new RideRequestDto(rideId,
                 new SmartCityPosition(xStart, yStart),
                 new SmartCityPosition(xEnd, yEnd));
     }

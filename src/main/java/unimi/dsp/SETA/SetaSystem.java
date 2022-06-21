@@ -86,6 +86,14 @@ public class SetaSystem implements Closeable {
     public void close() {
         for (Thread workingThread : this.workingThreads)
             workingThread.interrupt();
+
+        try {
+            IMqttToken token = this.mqttClient.unsubscribe(
+                    RIDE_REQUEST_TOPIC_PREFIX + "/+" + RIDE_CONFIRM_TOPIC_SUFFIX);
+            token.waitForCompletion();
+        } catch (MqttException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private class RideRequestPublisher extends Thread {
