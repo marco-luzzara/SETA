@@ -9,5 +9,5 @@ import java.util.function.Consumer;
 public interface SETAPubSubBase {
     void subscribeToDistrictTopic(District district, Consumer<RideRequestDto> eventAction);
     void publishRideConfirmation(RideConfirmDto rideConfirm);
-    void unsubscribeFromCurrentDistrictTopic();
+    void unsubscribeFromDistrictTopic(District district);
 }

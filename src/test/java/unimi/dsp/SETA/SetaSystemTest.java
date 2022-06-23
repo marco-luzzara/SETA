@@ -32,8 +32,8 @@ public class SetaSystemTest {
     private final RuntimeException sinkedException = new RuntimeException();
     private static final String RIDE_REQUEST_TOPIC_PREFIX = ConfigurationManager
             .getInstance().getRideRequestTopicPrefix();
-    private static final String RIDE_CONFIRM_TOPIC_SUFFIX = ConfigurationManager
-            .getInstance().getRideConfirmationTopicSuffix();
+    private static final String RIDE_CONFIRM_TOPIC = ConfigurationManager
+            .getInstance().getRideConfirmationTopic();
 
     @Test
     public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() {
@@ -108,7 +108,7 @@ public class SetaSystemTest {
                 ss.run();
                 Thread.sleep(500);
 
-                client.publish(RIDE_REQUEST_TOPIC_PREFIX + "/district1" + RIDE_CONFIRM_TOPIC_SUFFIX,
+                client.publish(RIDE_CONFIRM_TOPIC,
                         SerializationUtil.serialize(new RideConfirmDto(0)), 2, false);
 
                 Thread.sleep(1500);

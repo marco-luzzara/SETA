@@ -57,8 +57,8 @@ public class ConfigurationManager {
     public String getRideRequestTopicPrefix() {
         return props.getProperty("rideRequestTopicPrefix");
     }
-    public String getRideConfirmationTopicSuffix() {
-        return props.getProperty("rideConfirmationTopicSuffix");
+    public String getRideConfirmationTopic() {
+        return props.getProperty("rideConfirmationTopic");
     }
 
     public int getNumDistricts() {

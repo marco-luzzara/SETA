@@ -8,13 +8,18 @@ import io.grpc.ServerBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider;
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import unimi.dsp.dto.NewTaxiDto;
+import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.taxi.services.grpc.TaxiService;
+import unimi.dsp.taxi.services.mqtt.SETAPubSub;
 import unimi.dsp.taxi.services.rest.AdminService;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
@@ -28,8 +33,6 @@ import java.util.stream.Collectors;
 
 public class Taxi implements Closeable  {
     private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
-    private static final String RIDE_REQUEST_TOPIC_PREFIX = configurationManager.getRideRequestTopicPrefix();
-    private static final String RIDE_CONFIRM_TOPIC_SUFFIX = configurationManager.getRideConfirmationTopicSuffix();
     private static final Logger logger = LogManager.getLogger(Taxi.class.getName());
 
     private final int id;
@@ -46,7 +49,7 @@ public class Taxi implements Closeable  {
     private HashMap<Integer, NetworkTaxiConnection> networkTaxis;
     private TaxiStatus status;
 
-    // for ride request processing
+    // TODO: for ride request processing to partially avoid double requests
     private Optional<Integer> lastElectionId;
     private long subscriptionTs;
     // the key of the outer map represents the ride request election, while the key of the inner map
@@ -57,7 +60,7 @@ public class Taxi implements Closeable  {
     private Server grpcServer;
 
     // for mqtt communication
-    private final MqttAsyncClient mqttClient;
+    private final SETAPubSubBase setaPubSub;
 
     // for admin server communication
     private final AdminServiceBase adminService;
@@ -67,7 +70,8 @@ public class Taxi implements Closeable  {
                 int batteryConsumptionPerKm,
                 int batteryThresholdBeforeRecharge,
                 int rechargeDelay,
-                AdminServiceBase adminService) {
+                AdminServiceBase adminService,
+                SETAPubSubBase setaPubSub) {
         this.id = id;
         this.host = host;
         this.port = port;
@@ -76,12 +80,11 @@ public class Taxi implements Closeable  {
         this.batteryThresholdBeforeRecharge = batteryThresholdBeforeRecharge;
         this.rechargeDelay = rechargeDelay;
         this.adminService = adminService;
+        this.setaPubSub = setaPubSub;
         this.batteryLevel = 100;
         this.status = TaxiStatus.UNSTARTED;
         this.networkTaxis = new HashMap<>();
         this.rideRequestElectionsMap = new HashMap<>();
-
-        this.mqttClient = MQTTClientFactory.getClient();
     }
 
     public int getId() {
@@ -225,7 +228,8 @@ public class Taxi implements Closeable  {
             }
         }
 
-        // confirm to seta through publish
+        // TODO: confirm to seta through publish
+        this.setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
 
         if (!District.fromPosition(rideRequest.getEnd()).equals(this.getDistrict())) {
             this.unsubscribeFromDistrictTopic();
@@ -248,18 +252,8 @@ public class Taxi implements Closeable  {
         }
     }
 
-    private class RideRequestReceiveCallback implements MqttCallback {
-        @Override
-        public void connectionLost(Throwable cause) {
-            logger.error(cause);
-        }
-
-        @Override
-        public void messageArrived(String topic, MqttMessage message) {
-            if (!topic.startsWith(RIDE_REQUEST_TOPIC_PREFIX))
-                return;
-
-            RideRequestDto rideRequest = SerializationUtil.deserialize(message.getPayload(), RideRequestDto.class);
+    void subscribeToDistrictTopic() {
+        this.setaPubSub.subscribeToDistrictTopic(this.getDistrict(), (rideRequest) -> {
             synchronized (rideRequestElectionsMap) {
                 Map<Integer, Boolean> rideRequestMap = new HashMap<>();
                 for (Integer taxiId : getTaxiIdsInSameDistrict()) {
@@ -272,25 +266,9 @@ public class Taxi implements Closeable  {
             }
 
             rideRequestElectionsMap.put(rideRequest, new HashMap<>());
-        }
+        });
 
-        @Override
-        public void deliveryComplete(IMqttDeliveryToken token) {
-        }
-    }
-
-    void subscribeToDistrictTopic() {
-        String district = this.getDistrict().toString();
-        this.mqttClient.setCallback(new RideRequestReceiveCallback());
         this.lastElectionId = Optional.empty();
-
-        try {
-            this.mqttClient.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district" + district, 1)
-                    .waitForCompletion();
-        } catch (MqttException e) {
-            logger.error("Taxi with id " + this.getId() + " cannot subscribe to district topic", e);
-            throw new RuntimeException(e);
-        }
         // I am assuming that SETA time and current taxi time are synchronized
         this.subscriptionTs = System.currentTimeMillis();
     }
@@ -301,14 +279,7 @@ public class Taxi implements Closeable  {
     }
 
     void unsubscribeFromDistrictTopic() {
-        String district = this.getDistrict().toString();
-        try {
-            this.mqttClient.unsubscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district" + district)
-                    .waitForCompletion();
-        } catch (MqttException e) {
-            logger.error("Taxi with id " + this.getId() + " cannot unsubscribe", e);
-            throw new RuntimeException(e);
-        }
+        this.setaPubSub.unsubscribeFromDistrictTopic(this.getDistrict());
     }
 
     void informOtherTaxisAboutExitingFromTheNetwork() {
@@ -367,6 +338,9 @@ public class Taxi implements Closeable  {
         Client client = Client.create(config);
         AdminServiceBase adminService = new AdminService(client, serverEndpoint);
 
+        // mqtt initialization
+        SETAPubSubBase setaPubSubBase = new SETAPubSub(MQTTClientFactory.getClient());
+
         // taxi initialization
         int rideDeliveryDelay = configurationManager.getRideDeliveryDelay();
         int batteryConsumptionPerKm = configurationManager.getBatteryConsumptionPerKm();
@@ -377,7 +351,7 @@ public class Taxi implements Closeable  {
         final String QUIT_COMMAND = "quit";
 
         try (Taxi taxi = new Taxi(id, host, port, rideDeliveryDelay, batteryConsumptionPerKm,
-                batteryThresholdBeforeRecharge, rechargeDelay, adminService)) {
+                batteryThresholdBeforeRecharge, rechargeDelay, adminService, setaPubSubBase)) {
             taxi.enterInSETANetwork();
 
             List<String> availableCmds = Arrays.asList(RECHARGE_COMMAND, QUIT_COMMAND);
