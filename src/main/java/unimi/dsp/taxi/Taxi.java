@@ -1,8 +1,6 @@
 package unimi.dsp.taxi;
 
 import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.GenericType;
 import com.sun.jersey.api.client.config.ClientConfig;
 import com.sun.jersey.api.client.config.DefaultClientConfig;
 import io.grpc.Server;
@@ -16,19 +14,16 @@ import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
-import unimi.dsp.taxi.grpc.services.TaxiService;
+import unimi.dsp.taxi.services.grpc.TaxiService;
+import unimi.dsp.taxi.services.rest.AdminService;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
-import unimi.dsp.util.RestUtil;
 import unimi.dsp.util.SerializationUtil;
 
-import javax.ws.rs.core.Response;
 import java.io.Closeable;
+import java.io.Console;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class Taxi implements Closeable  {
@@ -65,14 +60,14 @@ public class Taxi implements Closeable  {
     private final MqttAsyncClient mqttClient;
 
     // for admin server communication
-    private final Client restClient;
-    private final String serverEndpoint = configurationManager.getAdminServerEndpoint();
+    private final AdminServiceBase adminService;
 
     public Taxi(int id, String host, int port,
                 int rideDeliveryDelay,
                 int batteryConsumptionPerKm,
                 int batteryThresholdBeforeRecharge,
-                int rechargeDelay) {
+                int rechargeDelay,
+                AdminServiceBase adminService) {
         this.id = id;
         this.host = host;
         this.port = port;
@@ -80,15 +75,11 @@ public class Taxi implements Closeable  {
         this.batteryConsumptionPerKm = batteryConsumptionPerKm;
         this.batteryThresholdBeforeRecharge = batteryThresholdBeforeRecharge;
         this.rechargeDelay = rechargeDelay;
+        this.adminService = adminService;
         this.batteryLevel = 100;
         this.status = TaxiStatus.UNSTARTED;
         this.networkTaxis = new HashMap<>();
         this.rideRequestElectionsMap = new HashMap<>();
-
-        // for rest register and unregister
-        ClientConfig config = new DefaultClientConfig();
-        config.getClasses().add(JacksonJaxbJsonProvider.class);
-        this.restClient = Client.create(config);
 
         this.mqttClient = MQTTClientFactory.getClient();
     }
@@ -115,6 +106,14 @@ public class Taxi implements Closeable  {
 
     public int getBatteryLevel() {
         return batteryLevel;
+    }
+
+    void setX(int x) {
+        this.x = x;
+    }
+
+    void setY(int y) {
+        this.y = y;
     }
 
     public District getDistrict() {
@@ -152,7 +151,7 @@ public class Taxi implements Closeable  {
                 .collect(Collectors.toList());
     }
 
-    public void enterInSETANetwork() throws MqttException {
+    public void enterInSETANetwork() {
         this.startGRPCServer();
         this.setStatus(TaxiStatus.GRPC_STARTED);
         this.registerToServer();
@@ -166,6 +165,8 @@ public class Taxi implements Closeable  {
         logger.info("Taxi with id = {} goes from status {} to {}",
                 this.getId(), this.getStatus().toString(), status.toString());
         this.status = status;
+        // necessary to unlock a quit or recharge command if pending
+        this.notifyAll();
     }
 
     public synchronized TaxiStatus getStatus() {
@@ -184,12 +185,7 @@ public class Taxi implements Closeable  {
     }
 
     void registerToServer() {
-        ClientResponse response = RestUtil.postRequest(restClient, serverEndpoint + "/taxis",
-                new TaxiInfoDto(this.id, this.host, this.port));
-        if (response.getStatus() == Response.Status.CONFLICT.getStatusCode())
-            throw new IllegalStateException("Taxi cannot register because another taxi has the same id");
-        NewTaxiDto newTaxi = response.getEntity(new GenericType<NewTaxiDto>() {
-        });
+        NewTaxiDto newTaxi = this.adminService.registerTaxi(new TaxiInfoDto(this.id, this.host, this.port));
         this.x = newTaxi.getX();
         this.y = newTaxi.getY();
         for (TaxiInfoDto taxiInfoDto : newTaxi.getTaxiInfos()) {
@@ -203,14 +199,16 @@ public class Taxi implements Closeable  {
         }
     }
 
-    // synchronize on this object because it is a possibly status changing method
+    // synchronized on this object because it is a possibly status changing method
     public synchronized void takeRideIfPossible(RideRequestDto rideRequest) {
+        if (!this.getStatus().equals(TaxiStatus.AVAILABLE))
+            return;
+
         Map<RideRequestDto, Map<Integer, Boolean>> rideRequestsMap = this.getRideRequestElectionsMap();
         synchronized (rideRequestsMap) {
             if (!rideRequestsMap.containsKey(rideRequest) ||
                     // check whether there is at least one false response from the other taxis
-                    rideRequestsMap.get(rideRequest).values().stream().anyMatch(b -> !b) ||
-                    !this.getStatus().equals(TaxiStatus.AVAILABLE))
+                    rideRequestsMap.get(rideRequest).values().stream().anyMatch(b -> !b))
                 return;
 
             this.setStatus(TaxiStatus.DRIVING);
@@ -281,15 +279,25 @@ public class Taxi implements Closeable  {
         }
     }
 
-    void subscribeToDistrictTopic() throws MqttException {
+    void subscribeToDistrictTopic() {
         String district = this.getDistrict().toString();
         this.mqttClient.setCallback(new RideRequestReceiveCallback());
         this.lastElectionId = Optional.empty();
 
-        this.mqttClient.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district" + district, 1)
-                .waitForCompletion();
+        try {
+            this.mqttClient.subscribe(RIDE_REQUEST_TOPIC_PREFIX + "/district" + district, 1)
+                    .waitForCompletion();
+        } catch (MqttException e) {
+            logger.error("Taxi with id " + this.getId() + " cannot subscribe to district topic", e);
+            throw new RuntimeException(e);
+        }
         // I am assuming that SETA time and current taxi time are synchronized
         this.subscriptionTs = System.currentTimeMillis();
+    }
+
+    // synchronized on this object because it is a possibly status changing method
+    public synchronized void goToRechargeStationIfPossible() {
+//        synchronized ()
     }
 
     void unsubscribeFromDistrictTopic() {
@@ -312,13 +320,7 @@ public class Taxi implements Closeable  {
     }
 
     private void unregisterFromServer() {
-        String serverEndpoint = ConfigurationManager.getInstance().getAdminServerEndpoint();
-
-        ClientResponse response = RestUtil.sendDeleteRequest(restClient,
-                serverEndpoint + "/taxis/" + this.id);
-        int statusCode = response.getStatus();
-        if (statusCode != Response.Status.OK.getStatusCode())
-            throw new IllegalStateException("The taxi did not unregister correctly, status code: " + statusCode);
+        this.adminService.unregisterTaxi(this.id);
     }
 
     private void stopGRPCServer() {
@@ -351,6 +353,72 @@ public class Taxi implements Closeable  {
     }
 
     public static void main(String[] args) {
+        if (args.length <= 2) {
+            throw new IllegalArgumentException("put arguments in the following order: id, host, port");
+        }
+        int id = Integer.parseInt(args[0]);
+        String host = args[1];
+        int port = Integer.parseInt(args[2]);
+
+        // rest server initialization
+        String serverEndpoint = configurationManager.getAdminServerEndpoint();
+        ClientConfig config = new DefaultClientConfig();
+        config.getClasses().add(JacksonJaxbJsonProvider.class);
+        Client client = Client.create(config);
+        AdminServiceBase adminService = new AdminService(client, serverEndpoint);
+
+        // taxi initialization
+        int rideDeliveryDelay = configurationManager.getRideDeliveryDelay();
+        int batteryConsumptionPerKm = configurationManager.getBatteryConsumptionPerKm();
+        int batteryThresholdBeforeRecharge = configurationManager.getBatteryThresholdBeforeRecharge();
+        int rechargeDelay = configurationManager.getRechargeDelay();
+
+        final String RECHARGE_COMMAND = "recharge";
+        final String QUIT_COMMAND = "quit";
+
+        try (Taxi taxi = new Taxi(id, host, port, rideDeliveryDelay, batteryConsumptionPerKm,
+                batteryThresholdBeforeRecharge, rechargeDelay, adminService)) {
+            taxi.enterInSETANetwork();
+
+            List<String> availableCmds = Arrays.asList(RECHARGE_COMMAND, QUIT_COMMAND);
+            System.out.println("Available commands: " + String.join(", ", availableCmds));
+
+            while (true) {
+                Console console = System.console();
+                String command = console.readLine();
+
+                if (command.equals(QUIT_COMMAND)) {
+                    synchronized (taxi) {
+                        while (!taxi.getStatus().equals(TaxiStatus.AVAILABLE)) {
+                            try {
+                                taxi.wait();
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+
+                        // by returning, the "close" method is automatically called
+                        return;
+                    }
+                }
+                else if (command.equals(RECHARGE_COMMAND)) {
+                    synchronized (taxi) {
+                        while (!taxi.getStatus().equals(TaxiStatus.AVAILABLE)) {
+                            try {
+                                taxi.wait();
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+
+                        taxi.goToRechargeStationIfPossible();
+                    }
+                }
+                else {
+                    System.out.println("The command " + command + " is not available");
+                }
+            }
+        }
 
     }
 

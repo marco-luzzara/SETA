@@ -1,4 +1,4 @@
-package unimi.dsp.taxi.grpc.services;
+package unimi.dsp.taxi.services.grpc;
 
 import com.google.protobuf.Empty;
 import io.grpc.stub.StreamObserver;
