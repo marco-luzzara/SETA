@@ -34,19 +34,18 @@ public class Taxi implements Closeable  {
     private final int id;
     private final String host;
     private final int port;
-    private final int rideDeliveryDelay;
-    private final int batteryConsumptionPerKm;
-    private final int batteryThresholdBeforeRecharge;
-    private final int rechargeDelay;
+    private final TaxiConfig taxiConfig;
+//    private final int rideDeliveryDelay;
+//    private final int batteryConsumptionPerKm;
+//    private final int batteryThresholdBeforeRecharge;
+//    private final int rechargeDelay;
     private int batteryLevel;
     private int x;
     private int y;
     // map that associate a connection to all the other taxis in the network
     private HashMap<Integer, NetworkTaxiConnection> networkTaxis;
     private TaxiStatus status;
-
-    // TODO: for ride request processing to partially avoid double requests
-    private Optional<Integer> lastElectionId;
+    private Set<Integer> takenRides = new HashSet<>();
     private long subscriptionTs;
     // the key of the outer map represents the ride request election, while the key of the inner map
     // is the taxiId associated to the OK-like message for the ride approval
@@ -62,22 +61,16 @@ public class Taxi implements Closeable  {
     private final AdminServiceBase adminService;
 
     public Taxi(int id, String host, int port,
-                int rideDeliveryDelay,
-                int batteryConsumptionPerKm,
-                int batteryThresholdBeforeRecharge,
-                int rechargeDelay,
+                TaxiConfig taxiConfig,
                 AdminServiceBase adminService,
                 SETATaxiPubSubBase setaPubSub) {
         this.id = id;
         this.host = host;
         this.port = port;
-        this.rideDeliveryDelay = rideDeliveryDelay;
-        this.batteryConsumptionPerKm = batteryConsumptionPerKm;
-        this.batteryThresholdBeforeRecharge = batteryThresholdBeforeRecharge;
-        this.rechargeDelay = rechargeDelay;
+        this.taxiConfig = taxiConfig;
         this.adminService = adminService;
         this.setaPubSub = setaPubSub;
-        this.batteryLevel = 100;
+        this.batteryLevel = this.taxiConfig.initialBatteryLevel;
         this.status = TaxiStatus.UNSTARTED;
         this.networkTaxis = new HashMap<>();
         this.rideRequestElectionsMap = new HashMap<>();
@@ -105,6 +98,10 @@ public class Taxi implements Closeable  {
 
     public int getBatteryLevel() {
         return batteryLevel;
+    }
+
+    public Set<Integer> getTakenRides() {
+        return takenRides;
     }
 
     void setX(int x) {
@@ -137,6 +134,12 @@ public class Taxi implements Closeable  {
         return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
+    static public double getDistanceBetweenRideStartAndEnd(RideRequestDto rideRequest) {
+        double deltaX = rideRequest.getEnd().x - rideRequest.getStart().x;
+        double deltaY = rideRequest.getEnd().y - rideRequest.getStart().y;
+        return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
     public Collection<NetworkTaxiConnection> getTaxiConnectionsInSameDistrict() {
         return this.getNetworkTaxiConnections().values().stream()
                 .filter(conn -> conn.getRemoteTaxiDistrict().equals(this.getDistrict()))
@@ -162,7 +165,7 @@ public class Taxi implements Closeable  {
 
     public synchronized void setStatus(TaxiStatus status) {
         logger.info("Taxi with id = {} goes from status {} to {}",
-                this.getId(), this.getStatus().toString(), status.toString());
+                this.id, this.status.toString(), status.toString());
         this.status = status;
         // necessary to unlock a quit or recharge command if pending
         this.notifyAll();
@@ -178,6 +181,7 @@ public class Taxi implements Closeable  {
 
         try {
             this.grpcServer.start();
+            logger.info("Taxi {} started the grpc server", this.id);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -190,12 +194,14 @@ public class Taxi implements Closeable  {
         for (TaxiInfoDto taxiInfoDto : newTaxi.getTaxiInfos()) {
             this.networkTaxis.put(taxiInfoDto.getId(), new NetworkTaxiConnection(this, taxiInfoDto));
         }
+        logger.info("Taxi {} registered to server", this.id);
     }
 
     void informOtherTaxisAboutEnteringTheNetwork() {
         for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
             taxiConnection.sendAddTaxi();
         }
+        logger.info("Taxi {} presented itself to the other taxis", this.id);
     }
 
     // synchronized on this object because it is a possibly status changing method
@@ -210,52 +216,60 @@ public class Taxi implements Closeable  {
                     rideRequestsMap.get(rideRequest).values().stream().anyMatch(b -> !b))
                 return;
 
+            this.takenRides.add(rideRequest.getId());
             this.setStatus(TaxiStatus.DRIVING);
             for (int taxiId : this.rideRequestElectionsMap.get(rideRequest).keySet()) {
                 this.networkTaxis.get(taxiId).sendUpdateRideRequestApproval(rideRequest, true);
             }
-            this.networkTaxis.remove(rideRequest.getId());
+            this.rideRequestElectionsMap.remove(rideRequest.getId());
 
             for (Map.Entry<RideRequestDto, Map<Integer, Boolean>>
                     rideRequestMap : this.rideRequestElectionsMap.entrySet()) {
                 for (Integer taxiId : rideRequestMap.getValue().keySet()) {
-                    this.networkTaxis.get(taxiId).sendUpdateRideRequestApproval(rideRequest, false);
+                    this.networkTaxis.get(taxiId)
+                            .sendUpdateRideRequestApproval(rideRequestMap.getKey(), false);
                 }
             }
+
+            this.rideRequestElectionsMap.clear();
         }
 
         // TODO: confirm to seta through publish
         this.setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
 
-        if (!District.fromPosition(rideRequest.getEnd()).equals(this.getDistrict())) {
+        if (!District.fromPosition(rideRequest.getEnd()).equals(this.getDistrict()))
             this.unsubscribeFromDistrictTopic();
-            this.rideRequestElectionsMap.clear();
-        }
 
         try {
-            Thread.sleep(this.rideDeliveryDelay);
+            Thread.sleep(this.taxiConfig.rideDeliveryDelay);
         } catch (InterruptedException e) {
             logger.error("Sleep for ride is interrupted", e);
             throw new RuntimeException(e);
         }
 
+        this.batteryLevel -= (getDistanceFromRideStart(rideRequest) +
+                Taxi.getDistanceBetweenRideStartAndEnd(rideRequest)) * this.taxiConfig.batteryConsumptionPerKm;
+        this.x = rideRequest.getEnd().x;
+        this.y = rideRequest.getEnd().y;
         this.informOtherTaxisAboutDistrictChanged();
+        this.setStatus(TaxiStatus.AVAILABLE);
+        this.subscribeToDistrictTopic();
     }
 
     void informOtherTaxisAboutDistrictChanged() {
         for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
             taxiConnection.sendLocalDistrictChanged();
         }
+        logger.info("Taxi {} informed the other taxis that it is now in the district {}",
+                this.id, this.getDistrict());
     }
 
     void subscribeToDistrictTopic() {
         this.setaPubSub.subscribeToDistrictTopic(this.getDistrict(), (rideRequest) -> {
-            logger.info("Taxi {} will try to take the ride request {}", getId(), rideRequest.getId());
+            logger.info("Taxi {} received the ride request {}", Taxi.this.id, rideRequest.getId());
             synchronized (rideRequestElectionsMap) {
                 Map<Integer, Boolean> rideRequestMap = new HashMap<>();
                 Collection<Integer> districtTaxiIds = this.getTaxiIdsInSameDistrict();
-                if (districtTaxiIds.isEmpty())
-                    this.takeRideIfPossible(rideRequest);
 
                 for (Integer taxiId : districtTaxiIds) {
                     rideRequestMap.put(taxiId, false);
@@ -263,13 +277,12 @@ public class Taxi implements Closeable  {
                 }
 
                 rideRequestElectionsMap.put(rideRequest, rideRequestMap);
-                rideRequestElectionsMap.notifyAll();
+                if (rideRequestMap.isEmpty())
+                    this.takeRideIfPossible(rideRequest);
             }
-
-            rideRequestElectionsMap.put(rideRequest, new HashMap<>());
         });
+        logger.info("Taxi {} subscribed to district topic {}", Taxi.this.id, Taxi.this.getDistrict());
 
-        this.lastElectionId = Optional.empty();
         // I am assuming that SETA time and current taxi time are synchronized
         this.subscriptionTs = System.currentTimeMillis();
     }
@@ -281,6 +294,7 @@ public class Taxi implements Closeable  {
 
     void unsubscribeFromDistrictTopic() {
         this.setaPubSub.unsubscribeFromDistrictTopic(this.getDistrict());
+        logger.info("Taxi {} unsubscribed from district {}", this.id, this.getDistrict());
     }
 
     void informOtherTaxisAboutExitingFromTheNetwork() {
@@ -289,14 +303,17 @@ public class Taxi implements Closeable  {
         }
 
         this.networkTaxis = new HashMap<>();
+        logger.info("Taxi {} informed other taxis that it exited from the network", this.id);
     }
 
     private void unregisterFromServer() {
         this.adminService.unregisterTaxi(this.id);
+        logger.info("Taxi {} unregistered from the server", this.id);
     }
 
     private void stopGRPCServer() {
         this.grpcServer.shutdown();
+        logger.info("Taxi {} stopped its grpc server", this.id);
     }
 
     @Override
@@ -316,10 +333,10 @@ public class Taxi implements Closeable  {
                 return;
             }
 
-            this.unregisterFromServer();
             this.informOtherTaxisAboutExitingFromTheNetwork();
-            this.stopGRPCServer();
             this.unsubscribeFromDistrictTopic();
+            this.unregisterFromServer();
+            this.stopGRPCServer();
         } finally {
             this.setStatus(TaxiStatus.UNSTARTED);
         }
@@ -345,16 +362,12 @@ public class Taxi implements Closeable  {
         SETATaxiPubSubBase setaTaxiPubSubBase = new SETATaxiPubSub(mqttClient);
 
         // taxi initialization
-        int rideDeliveryDelay = configurationManager.getRideDeliveryDelay();
-        int batteryConsumptionPerKm = configurationManager.getBatteryConsumptionPerKm();
-        int batteryThresholdBeforeRecharge = configurationManager.getBatteryThresholdBeforeRecharge();
-        int rechargeDelay = configurationManager.getRechargeDelay();
+        TaxiConfig taxiConfig = new TaxiConfig();
 
         final String RECHARGE_COMMAND = "recharge";
         final String QUIT_COMMAND = "quit";
 
-        try (Taxi taxi = new Taxi(id, host, port, rideDeliveryDelay, batteryConsumptionPerKm,
-                batteryThresholdBeforeRecharge, rechargeDelay, adminService, setaTaxiPubSubBase)) {
+        try (Taxi taxi = new Taxi(id, host, port, taxiConfig, adminService, setaTaxiPubSubBase)) {
             taxi.enterInSETANetwork();
 
             List<String> availableCmds = Arrays.asList(RECHARGE_COMMAND, QUIT_COMMAND);
@@ -417,6 +430,39 @@ public class Taxi implements Closeable  {
 
         TaxiStatus(int value) {
             this.value = value;
+        }
+    }
+
+    public static class TaxiConfig {
+        private int rideDeliveryDelay = configurationManager.getRideDeliveryDelay();
+        private int batteryConsumptionPerKm = configurationManager.getBatteryConsumptionPerKm();
+        private int batteryThresholdBeforeRecharge = configurationManager.getBatteryThresholdBeforeRecharge();
+        private int rechargeDelay = configurationManager.getRechargeDelay();
+        private int initialBatteryLevel = 100;
+
+        public TaxiConfig withRideDeliveryDelay(int rideDeliveryDelay) {
+            this.rideDeliveryDelay = rideDeliveryDelay;
+            return this;
+        }
+
+        public TaxiConfig withBatteryConsumptionPerKm(int batteryConsumptionPerKm) {
+            this.batteryConsumptionPerKm = batteryConsumptionPerKm;
+            return this;
+        }
+
+        public TaxiConfig withBatteryThresholdBeforeRecharge(int batteryThresholdBeforeRecharge) {
+            this.batteryThresholdBeforeRecharge = batteryThresholdBeforeRecharge;
+            return this;
+        }
+
+        public TaxiConfig withRechargeDelay(int rechargeDelay) {
+            this.rechargeDelay = rechargeDelay;
+            return this;
+        }
+
+        public TaxiConfig withInitialBatterylevel(int initialBatteryLevel) {
+            this.initialBatteryLevel = initialBatteryLevel;
+            return this;
         }
     }
 }

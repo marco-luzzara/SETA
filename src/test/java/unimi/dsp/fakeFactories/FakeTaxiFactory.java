@@ -10,32 +10,28 @@ import unimi.dsp.util.MQTTClientFactory;
 public class FakeTaxiFactory {
     private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
     private static int portCounter = 5050;
-    private static SETATaxiPubSubBase setaPubSub = new SETATaxiPubSub(MQTTClientFactory.getClient());
 
     public static Taxi getTaxi(int seed, AdminServiceBase adminService) {
         return getTaxi(seed,
-                configurationManager.getRideDeliveryDelay(),
-                configurationManager.getBatteryConsumptionPerKm(),
-                configurationManager.getBatteryThresholdBeforeRecharge(),
-                configurationManager.getRechargeDelay(),
+                new Taxi.TaxiConfig(),
+                adminService);
+    }
+
+    public static Taxi getTaxi(int seed, int rideDeliveryDelay, AdminServiceBase adminService) {
+        return getTaxi(seed,
+                new Taxi.TaxiConfig().withRideDeliveryDelay(rideDeliveryDelay),
                 adminService);
     }
 
     public static Taxi getTaxi(int seed,
-                               int rideDeliveryDelay,
-                               int batteryConsumptionPerKm,
-                               int batteryThresholdBeforeRecharge,
-                               int rechargeDelay,
+                               Taxi.TaxiConfig taxiConfig,
                                AdminServiceBase adminService) {
         portCounter++;
         return new Taxi(seed,
                 "localhost",
                 portCounter,
-                rideDeliveryDelay,
-                batteryConsumptionPerKm,
-                batteryThresholdBeforeRecharge,
-                rechargeDelay,
+                taxiConfig,
                 adminService,
-                setaPubSub);
+                new SETATaxiPubSub(MQTTClientFactory.getClient()));
     }
 }

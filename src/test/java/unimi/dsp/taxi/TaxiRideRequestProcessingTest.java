@@ -1,32 +1,264 @@
 package unimi.dsp.taxi;
 
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import unimi.dsp.SETA.SetaSystem;
+import org.mockito.stubbing.OngoingStubbing;
+import unimi.dsp.SETA.SETAServerPubSubBase;
+import unimi.dsp.SETA.services.SETAServerPubSub;
 import unimi.dsp.adminServer.services.TaxiPositionGenerator;
+import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.fakeFactories.FakeTaxiFactory;
-import unimi.dsp.fakeFactories.RidePositionGeneratorFactory;
+import unimi.dsp.model.types.District;
+import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.stubs.AdminServiceStub;
+import unimi.dsp.util.MQTTClientFactory;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TaxiRideRequestProcessingTest {
     private final TaxiPositionGenerator taxiPositionGenerator = mock(TaxiPositionGenerator.class);
     private final AdminServiceBase adminService = new AdminServiceStub(taxiPositionGenerator);
+    private final MqttAsyncClient mqttClient = MQTTClientFactory.getClient();
+    private final SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(mqttClient);
 
-//    @Test
-//    public void givenOneTaxi_WhenARideIsPublished_ThenItTakesItImmediately() {
-//        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService); SetaSystem ss = new SetaSystem(
-//                RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-//                1, 1, 1, 1500, 2)) {
-//            taxi.enterInSETANetwork();
-//
-//            assertEquals(1, taxi.getNetworkTaxiConnections().size());
-//        }
+    private List<Integer> confirmedRides = new ArrayList<>();
+
+    @AfterEach
+    public void testCleanup() throws MqttException {
+        mqttClient.disconnect().waitForCompletion();
+        mqttClient.close();
+    }
+
+    @Test
+    public void givenOneTaxi_WhenARideIsPublishedInSameDistrict_ThenTheTaxiTakesItImmediately() throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService)) {
+            taxi.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(0, 0), new SmartCityPosition(9, 0)));
+
+            Thread.sleep(500);
+            assertThat(this.confirmedRides).contains(0);
+        }
+    }
+
+    @Test
+    public void givenOneTaxi_WhenARideIsPublishedInDifferentDistrict_ThenTheTaxiIgnoresIt() throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService)) {
+            taxi.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(9, 0), new SmartCityPosition(9, 9)));
+
+            Thread.sleep(500);
+            assertThat(this.confirmedRides).isEmpty();
+        }
+    }
+
+    @Test
+    public void givenOneTaxi_WhenARideIsPublished_ThenDrivesAndReduceBattery() throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
+                new Taxi.TaxiConfig().withRideDeliveryDelay(0), adminService)) {
+            taxi.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(3, 4), new SmartCityPosition(7, 1)));
+
+            Thread.sleep(500);
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getBatteryLevel()).isEqualTo(90);
+        }
+    }
+
+    @Test
+    public void givenTwoTaxisInSameDistrict_WhenARideIsPublished_ThenOnlyOneTaxiTakesIt() throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0).generate(4, 4);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(0, 0), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getTakenRides()).contains(0);
+            assertThat(taxi2.getTakenRides()).isEmpty();
+        }
+    }
+
+    @Test
+    public void given3TaxisInSameDistrict_WhenARideIsPublished_ThenTheNearestTaxiTakesIt() throws InterruptedException {
+        new PositionGeneratorSetter()
+                .generate(0, 0).generate(3, 3).generate(4, 4);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService);
+             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+            taxi3.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getTakenRides()).hasSize(0);
+            assertThat(taxi2.getTakenRides()).contains(0);
+            assertThat(taxi3.getTakenRides()).hasSize(0);
+        }
+    }
+
+    @Test
+    public void given3TaxisEquallyDistantToARide_WhenARideIsPublished_ThenTheTaxiWithTheHighestBatteryTakesIt()
+            throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
+                    new Taxi.TaxiConfig().withInitialBatterylevel(60), adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2,
+                    new Taxi.TaxiConfig().withInitialBatterylevel(70), adminService);
+             Taxi taxi3 = FakeTaxiFactory.getTaxi(3,
+                    new Taxi.TaxiConfig().withInitialBatterylevel(50), adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+            taxi3.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getTakenRides()).hasSize(0);
+            assertThat(taxi2.getTakenRides()).contains(0);
+            assertThat(taxi3.getTakenRides()).hasSize(0);
+        }
+    }
+
+    @Test
+    public void given3TaxisDifferentFromIdOnly_WhenARideIsPublished_ThenTheTaxiWithTheHighestIdTakesIt()
+            throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService);
+             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+            taxi3.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getTakenRides()).hasSize(0);
+            assertThat(taxi2.getTakenRides()).hasSize(0);
+            assertThat(taxi3.getTakenRides()).contains(0);
+        }
+    }
+
+    @Test
+    public void givenATaxi_WhenTheRideDPIsInAnotherDistrict_ThenChangeDistrict() throws InterruptedException {
+        new PositionGeneratorSetter().generate(0, 0);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
+            taxi.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0);
+            assertThat(taxi.getDistrict()).isEqualTo(District.BOTTOM_LEFT);
+            assertThat(taxi.getStatus()).isEqualTo(Taxi.TaxiStatus.AVAILABLE);
+        }
+    }
+
+    @Test
+    public void given2TaxisInSameDistrict_When2RidesArePublishedNearerToTheFirstTaxi_ThenTaxisTakeOneRideEach()
+            throws InterruptedException {
+        new PositionGeneratorSetter().generate(1, 1).generate(4, 4);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(1,
+                    new SmartCityPosition(0, 1), new SmartCityPosition(9, 0)));
+            Thread.sleep(500);
+
+            assertThat(this.confirmedRides).contains(0, 1);
+            assertThat(taxi.getTakenRides()).hasSize(1);
+            assertThat(taxi2.getTakenRides()).hasSize(1);
+        }
+    }
+
+//    private void mockAdminServiceGeneration(int taxiId, int startX, int startY) {
+//        when(adminService.registerTaxi(argThat(new TaxiInfoDtoIsEqualGivenIdMatcher(taxiId))))
+//                .thenAnswer(a -> {
+//                    NewTaxiDto newTaxi = (NewTaxiDto) a.callRealMethod();
+//                    newTaxi.setX(startX);
+//                    newTaxi.setY(startY);
+//                    return newTaxi;
+//                });
 //    }
 
-    private void mockEnterSetaNetwork(Taxi taxi, int startX, int startY) {
-//        when(taxi.
+    private class PositionGeneratorSetter {
+        OngoingStubbing<SmartCityPosition> ongoingStubbing;
+        public PositionGeneratorSetter() {
+            this.ongoingStubbing = when(taxiPositionGenerator.getStartingPosition());
+        }
+
+        public PositionGeneratorSetter generate(int startX, int startY) {
+            this.ongoingStubbing = this.ongoingStubbing.thenReturn(new SmartCityPosition(startX, startY));
+            return this;
+        }
     }
+//    private void mockAdminServicePositionGeneration(int startX, int startY) {
+//        when(taxiPositionGenerator.getStartingPosition()).argThat(new TaxiInfoDtoIsEqualGivenIdMatcher(taxiId))))
+//                .thenAnswer(a -> {
+//                    NewTaxiDto newTaxi = (NewTaxiDto) a.callRealMethod();
+//                    newTaxi.setX(startX);
+//                    newTaxi.setY(startY);
+//                    return newTaxi;
+//                });
+//    }
 }

@@ -2,7 +2,6 @@ package unimi.dsp.SETA;
 
 import org.eclipse.paho.client.mqttv3.*;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 import unimi.dsp.SETA.services.SETAServerPubSub;
@@ -38,11 +37,11 @@ public class SetaSystemTest {
     private static final String RIDE_CONFIRM_TOPIC = ConfigurationManager
             .getInstance().getRideConfirmationTopic();
 
-    private MqttAsyncClient mqttClient = MQTTClientFactory.getClient();
-    private SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(mqttClient);
+    private final MqttAsyncClient mqttClient = MQTTClientFactory.getClient();
+    private final SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(mqttClient);
 
     @AfterEach
-    public void testInitialization() throws MqttException {
+    public void testCleanup() throws MqttException {
         mqttClient.disconnect().waitForCompletion();
         mqttClient.close();
     }

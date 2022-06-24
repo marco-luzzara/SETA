@@ -7,7 +7,7 @@ import unimi.dsp.model.types.District;
 import java.util.function.Consumer;
 
 public interface SETAServerPubSubBase {
-    void publishRideRequest(District district, RideRequestDto rideRequest);
+    void publishRideRequest(RideRequestDto rideRequest);
 
     void subscribeToRideConfirmationTopic(Consumer<RideConfirmDto> confirmAction);
 

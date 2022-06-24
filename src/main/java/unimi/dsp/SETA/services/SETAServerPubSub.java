@@ -70,13 +70,15 @@ public class SETAServerPubSub implements SETAServerPubSubBase {
         }
     }
 
-    public void publishRideRequest(District district, RideRequestDto rideRequest) {
+    public void publishRideRequest(RideRequestDto rideRequest) {
         try {
-            mqttClient.publish(
-                    RIDE_REQUEST_TOPIC_PREFIX + "/district" + district.toString(),
+            String messageTopic = RIDE_REQUEST_TOPIC_PREFIX + "/district" +
+                    District.fromPosition(rideRequest.getStart()).toString();
+            mqttClient.publish(messageTopic,
                     SerializationUtil.serialize(rideRequest),
                     1, false);
-            logger.info("Ride request with Id {} has been published", rideRequest.getId());
+            logger.info("Ride request with Id {} has been published in {}",
+                    rideRequest.getId(), messageTopic);
         } catch (MqttException e) {
             logger.error("Cannot publish ride request", e);
             throw new RuntimeException(e);

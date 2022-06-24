@@ -38,8 +38,8 @@ public enum District {
         }
     }
 
-    public static District fromId(int id) {
-        return Arrays.stream(District.values()).filter(d -> d.districtValue == id)
-                .findAny().orElseThrow(() -> new IllegalStateException("id specified not found: " + id));
-    }
+//    public static District fromId(int id) {
+//        return Arrays.stream(District.values()).filter(d -> d.districtValue == id)
+//                .findAny().orElseThrow(() -> new IllegalStateException("id specified not found: " + id));
+//    }
 }

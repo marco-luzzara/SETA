@@ -40,7 +40,7 @@ public class SETATaxiPubSub implements SETATaxiPubSubBase {
 
             @Override
             public void messageArrived(String topic, MqttMessage message) {
-                if (!topic.equals(RIDE_REQUEST_TOPIC_PREFIX))
+                if (!topic.startsWith(RIDE_REQUEST_TOPIC_PREFIX))
                     return;
 
                 RideRequestDto rideRequest = SerializationUtil.deserialize(message.getPayload(),
@@ -67,7 +67,7 @@ public class SETATaxiPubSub implements SETATaxiPubSubBase {
         try {
             this.mqttClient.publish(RIDE_CONFIRM_TOPIC, message, 1, false);
         } catch (MqttException e) {
-            logger.error("Publishing ride confirm for ride " + rideConfirm.getRideId(), e);
+            logger.error("Cannot publish ride confirm for ride " + rideConfirm.getRideId(), e);
             throw new RuntimeException(e);
         }
     }

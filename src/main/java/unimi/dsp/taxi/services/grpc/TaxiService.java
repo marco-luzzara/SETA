@@ -30,7 +30,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     public void addTaxi(TaxiServiceOuterClass.TaxiAddRequest request,
                         StreamObserver<TaxiServiceOuterClass.TaxiAddResponse> responseObserver) {
         NetworkTaxiConnection taxiConnection = new NetworkTaxiConnection(this.taxi,
-                new TaxiInfoDto(this.taxi.getId(), this.taxi.getHost(), this.taxi.getPort())
+                new TaxiInfoDto(request.getId(), request.getIpAddress(), request.getPort())
         );
         taxiConnection.setRemoteTaxiDistrict(
                 District.fromPosition(new SmartCityPosition(

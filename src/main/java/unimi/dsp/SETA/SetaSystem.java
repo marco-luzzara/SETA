@@ -99,7 +99,7 @@ public class SetaSystem implements Closeable {
         @Override
         public void run() {
             try {
-                setaServerPubSub.publishRideRequest(District.fromId(this.district), this.rideRequest);
+                setaServerPubSub.publishRideRequest(this.rideRequest);
 
                 synchronized (pendingRideConfirmations) {
                     pendingRideConfirmations.add(this.rideRequest.getId());
