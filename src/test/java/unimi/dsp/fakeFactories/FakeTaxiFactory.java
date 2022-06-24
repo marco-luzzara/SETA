@@ -1,19 +1,16 @@
 package unimi.dsp.fakeFactories;
 
-import unimi.dsp.adminServer.services.TaxiPositionGenerator;
-import unimi.dsp.model.types.SmartCityPosition;
-import unimi.dsp.stubs.AdminServiceStub;
 import unimi.dsp.taxi.AdminServiceBase;
-import unimi.dsp.taxi.SETAPubSubBase;
+import unimi.dsp.taxi.SETATaxiPubSubBase;
 import unimi.dsp.taxi.Taxi;
-import unimi.dsp.taxi.services.mqtt.SETAPubSub;
+import unimi.dsp.taxi.services.mqtt.SETATaxiPubSub;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
 
 public class FakeTaxiFactory {
     private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
     private static int portCounter = 5050;
-    private static SETAPubSubBase setaPubSub = new SETAPubSub(MQTTClientFactory.getClient());
+    private static SETATaxiPubSubBase setaPubSub = new SETATaxiPubSub(MQTTClientFactory.getClient());
 
     public static Taxi getTaxi(int seed, AdminServiceBase adminService) {
         return getTaxi(seed,

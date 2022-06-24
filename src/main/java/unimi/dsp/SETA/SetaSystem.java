@@ -3,6 +3,7 @@ package unimi.dsp.SETA;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.paho.client.mqttv3.*;
+import unimi.dsp.SETA.services.SETAServerPubSub;
 import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.District;
@@ -26,8 +27,7 @@ public class SetaSystem implements Closeable {
     private final int numGeneratedRequest;
     private final int rideRequestTimeout;
     private int curId;
-    private final IMqttAsyncClient mqttClient;
-    private final int qos;
+    private final SETAServerPubSubBase setaServerPubSub;
     private final Map<Integer, Set<RideRequestDto>> districtNewRequestsMap;
     private final Set<Integer> pendingRideConfirmations;
     private final List<Thread> workingThreads = new ArrayList<>();
@@ -45,16 +45,15 @@ public class SetaSystem implements Closeable {
                       int genFrequencyMillis,
                       int numGeneratedRequest,
                       int rideRequestTimeout,
-                      int qos) {
+                      SETAServerPubSubBase setaServerPubSub) {
         this.rideGenerator = rideGenerator;
         this.requestLimit = requestLimit;
         this.genFrequencyMillis = genFrequencyMillis;
         this.numGeneratedRequest = numGeneratedRequest;
         this.rideRequestTimeout = rideRequestTimeout;
-        this.qos = qos;
+        this.setaServerPubSub = setaServerPubSub;
         this.curId = 0;
 
-        this.mqttClient = MQTTClientFactory.getClient();
         this.districtNewRequestsMap = new HashMap<>();
         this.pendingRideConfirmations = new HashSet<>();
         for (int i = 1; i <= configurationManager.getNumDistricts(); i++) {
@@ -85,11 +84,7 @@ public class SetaSystem implements Closeable {
         for (Thread workingThread : this.workingThreads)
             workingThread.interrupt();
 
-        try {
-            this.mqttClient.unsubscribe(RIDE_CONFIRM_TOPIC).waitForCompletion();
-        } catch (MqttException e) {
-            throw new RuntimeException(e);
-        }
+        this.setaServerPubSub.unsubscribeFromRideConfirmationTopic();
     }
 
     private class RideRequestPublisher extends Thread {
@@ -104,11 +99,7 @@ public class SetaSystem implements Closeable {
         @Override
         public void run() {
             try {
-                mqttClient.publish(
-                        RIDE_REQUEST_TOPIC_PREFIX + "/district" + this.district,
-                        SerializationUtil.serialize(this.rideRequest),
-                        qos, false);
-                logger.info("Ride request with Id {} has been published", rideRequest.getId());
+                setaServerPubSub.publishRideRequest(District.fromId(this.district), this.rideRequest);
 
                 synchronized (pendingRideConfirmations) {
                     pendingRideConfirmations.add(this.rideRequest.getId());
@@ -132,7 +123,7 @@ public class SetaSystem implements Closeable {
                 synchronized (workingThreads) {
                     workingThreads.add(this);
                 }
-            } catch (MqttException | InterruptedException e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
                 throw new RuntimeException(e);
             }
@@ -198,41 +189,18 @@ public class SetaSystem implements Closeable {
         }
     }
 
-    private void subscribeToRideConfirmations() throws MqttException {
-        this.mqttClient.setCallback(new MqttCallback() {
-            @Override
-            public void connectionLost(Throwable cause) {
-            }
-
-            @Override
-            public void messageArrived(String topic, MqttMessage message) {
-                if (!topic.startsWith(RIDE_REQUEST_TOPIC_PREFIX) ||
-                        !topic.startsWith(RIDE_CONFIRM_TOPIC))
-                    return;
-
-                RideConfirmDto rideConfirm = SerializationUtil.deserialize(
-                        message.getPayload(), RideConfirmDto.class);
-                int districtId = getDistrictFromRideTopic(topic);
-                logger.info("Ride request with Id {} has been confirmed", rideConfirm.getRideId());
-
-                synchronized (pendingRideConfirmations) {
-                    pendingRideConfirmations.remove(rideConfirm.getRideId());
-                }
-            }
-
-            @Override
-            public void deliveryComplete(IMqttDeliveryToken token) {
+    private void subscribeToRideConfirmations() {
+        this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+            synchronized (pendingRideConfirmations) {
+                pendingRideConfirmations.remove(rideConfirm.getRideId());
             }
         });
-        // the qos is 1 because if I receive many messages with the same id,
-        // the `pendingRideRequestsSet.remove()` would return false and nothing happens.
-        this.mqttClient.subscribe(RIDE_CONFIRM_TOPIC, 1).waitForCompletion();
     }
 
-    private int getDistrictFromRideTopic(String topic) {
-        String districtString = topic.split("/")[3];
-        return Integer.parseInt(districtString.substring(8)); // start from the digit after "district"
-    }
+//    private int getDistrictFromRideTopic(String topic) {
+//        String districtString = topic.split("/")[3];
+//        return Integer.parseInt(districtString.substring(8)); // start from the digit after "district"
+//    }
 
     public static void main(String[] args) throws MqttException, InterruptedException {
         MqttAsyncClient client = MQTTClientFactory.getClient();
@@ -241,6 +209,8 @@ public class SetaSystem implements Closeable {
         int generationFrequencyMillis = configurationManager.getSETAGenerationFrequencyMillis();
         int numGeneratedRequest = configurationManager.getSETANumGeneratedRequest();
         int rideRequestTimeout = configurationManager.getRideRequestTimeout();
+        SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(client);
+
         RideGenerator rideGenerator = new RideGenerator() {
             private int id = -1;
             private final Random random = new Random();
@@ -268,8 +238,12 @@ public class SetaSystem implements Closeable {
         };
 
         try (SetaSystem ss = new SetaSystem(rideGenerator, 0,
-                generationFrequencyMillis, numGeneratedRequest, rideRequestTimeout, 1)) {
+                generationFrequencyMillis, numGeneratedRequest, rideRequestTimeout, setaServerPubSub)) {
             ss.run();
+        }
+        finally {
+            client.disconnect().waitForCompletion();
+            client.close();
         }
     }
 

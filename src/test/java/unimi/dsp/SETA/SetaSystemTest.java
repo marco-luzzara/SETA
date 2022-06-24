@@ -1,8 +1,11 @@
 package unimi.dsp.SETA;
 
 import org.eclipse.paho.client.mqttv3.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
+import unimi.dsp.SETA.services.SETAServerPubSub;
 import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.fakeFactories.RidePositionGeneratorFactory;
@@ -35,12 +38,21 @@ public class SetaSystemTest {
     private static final String RIDE_CONFIRM_TOPIC = ConfigurationManager
             .getInstance().getRideConfirmationTopic();
 
+    private MqttAsyncClient mqttClient = MQTTClientFactory.getClient();
+    private SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(mqttClient);
+
+    @AfterEach
+    public void testInitialization() throws MqttException {
+        mqttClient.disconnect().waitForCompletion();
+        mqttClient.close();
+    }
+
     @Test
     public void givenASingleRideRequest_WhenSETARun_MQTTSubSeeRide() {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 2000, 2)) {
+                    1, 1, 1, 2000, setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -67,7 +79,7 @@ public class SetaSystemTest {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 1500, 2)) {
+                    1, 1, 1, 1500, setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -96,7 +108,7 @@ public class SetaSystemTest {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 1500, 2)) {
+                    1, 1, 1, 1500, setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -129,7 +141,7 @@ public class SetaSystemTest {
                     RidePositionGeneratorFactory.getGenerator(
                             RidePositionGeneratorFactory.getRideRequest(0, 0, 0, 0, 1),
                             RidePositionGeneratorFactory.getRideRequest(1, 1, 2, 3, 4)),
-                    2, 10, 1, 2000, 2)){
+                    2, 10, 1, 2000, setaServerPubSub)){
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);

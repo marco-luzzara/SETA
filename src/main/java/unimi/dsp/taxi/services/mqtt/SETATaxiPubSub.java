@@ -6,23 +6,28 @@ import org.eclipse.paho.client.mqttv3.*;
 import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.District;
-import unimi.dsp.taxi.SETAPubSubBase;
-import unimi.dsp.taxi.Taxi;
+import unimi.dsp.taxi.SETATaxiPubSubBase;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.SerializationUtil;
 
-import java.util.Optional;
 import java.util.function.Consumer;
 
-public class SETAPubSub implements SETAPubSubBase {
+public class SETATaxiPubSub implements SETATaxiPubSubBase {
     private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
     private static final String RIDE_REQUEST_TOPIC_PREFIX = configurationManager.getRideRequestTopicPrefix();
     private static final String RIDE_CONFIRM_TOPIC = configurationManager.getRideConfirmationTopic();
-    private static final Logger logger = LogManager.getLogger(SETAPubSub.class.getName());
+    private static final Logger logger = LogManager.getLogger(SETATaxiPubSub.class.getName());
 
     private final MqttAsyncClient mqttClient;
-    public SETAPubSub(MqttAsyncClient mqttClient) {
+    public SETATaxiPubSub(MqttAsyncClient mqttClient) {
         this.mqttClient = mqttClient;
+        if (!this.mqttClient.isConnected()) {
+            try {
+                this.mqttClient.connect().waitForCompletion();
+            } catch (MqttException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     @Override
@@ -35,7 +40,7 @@ public class SETAPubSub implements SETAPubSubBase {
 
             @Override
             public void messageArrived(String topic, MqttMessage message) {
-                if (!topic.startsWith(RIDE_REQUEST_TOPIC_PREFIX))
+                if (!topic.equals(RIDE_REQUEST_TOPIC_PREFIX))
                     return;
 
                 RideRequestDto rideRequest = SerializationUtil.deserialize(message.getPayload(),

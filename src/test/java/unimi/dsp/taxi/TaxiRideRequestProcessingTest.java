@@ -17,7 +17,7 @@ public class TaxiRideRequestProcessingTest {
 
 //    @Test
 //    public void givenOneTaxi_WhenARideIsPublished_ThenItTakesItImmediately() {
-//        try (Taxi taxi = FakeTaxiFactory.getTaxi(1); SetaSystem ss = new SetaSystem(
+//        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService); SetaSystem ss = new SetaSystem(
 //                RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
 //                1, 1, 1, 1500, 2)) {
 //            taxi.enterInSETANetwork();

@@ -2,6 +2,8 @@ package unimi.dsp.model.types;
 
 import unimi.dsp.util.ConfigurationManager;
 
+import java.util.Arrays;
+
 public enum District {
     TOP_LEFT(1),
     TOP_RIGHT(2),
@@ -34,5 +36,10 @@ public enum District {
             else
                 return District.BOTTOM_RIGHT;
         }
+    }
+
+    public static District fromId(int id) {
+        return Arrays.stream(District.values()).filter(d -> d.districtValue == id)
+                .findAny().orElseThrow(() -> new IllegalStateException("id specified not found: " + id));
     }
 }
