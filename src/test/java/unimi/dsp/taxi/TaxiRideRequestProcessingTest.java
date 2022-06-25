@@ -39,7 +39,8 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void givenOneTaxi_WhenARideIsPublishedInSameDistrict_ThenTheTaxiTakesItImmediately() throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
+                new Taxi.TaxiConfig().withRideDeliveryDelay(0), adminService)) {
             taxi.enterInSETANetwork();
 
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {

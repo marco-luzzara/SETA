@@ -20,10 +20,6 @@ public class RideRequestDto {
     private RideRequestDto() {}
 
     public RideRequestDto(int id, SmartCityPosition start, SmartCityPosition end) {
-        if (start.equals(end)) {
-            throw new IllegalArgumentException("start and end must be different");
-        }
-
         this.id = id;
         this.xStart = start.x;
         this.yStart = start.y;

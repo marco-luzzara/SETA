@@ -26,30 +26,48 @@ message TaxiNewDistrictRequest {
   int32 newY = 3;
 }
 
-message ElectionInfoRequest {
+//message ElectionInfoRequest {
+//  int32 rideRequestId = 1;
+//  int32 taxiId = 2;
+//  double distanceFromSP = 3;
+//  int32 batteryLevel = 4;
+//  int64 rideRequestTimestamp = 5;
+//}
+
+message RideElectionIdRequest {
   int32 rideRequestId = 1;
-  int32 taxiId = 2;
-  double distanceFromSP = 3;
-  int32 batteryLevel = 4;
-  int64 rideRequestTimestamp = 5;
+  // I send all ride information because the receiver may have not subscribed in time or did not receive it yet
+  int32 startX = 2;
+  int32 startY = 3;
+  int32 endX = 4;
+  int32 endY = 5;
+  int32 taxiId = 6;
+  double distanceFromSP = 7;
+  int32 batteryLevel = 8;
 }
 
-message RideRequestApprovalResponse {
-  bool isApproved = 1;
+message RideElectionConfirmRequest {
+  int32 rideRequestId = 1;
 }
 
-message RideRequestUpdateRequest {
-  int32 rideRequestId = 1;
-  int32 taxiId = 2;
-  // if true, then it is already taken by another taxi, otherwise it is like an OK message,
-  // so the ride request is still available
-  bool isAlreadyConfirmed = 3;
-}
+//message RideRequestApprovalResponse {
+//  bool isApproved = 1;
+//}
+
+//message RideRequestUpdateRequest {
+//  int32 rideRequestId = 1;
+//  int32 taxiId = 2;
+//  // if true, then it is already taken by another taxi, otherwise it is like an OK message,
+//  // so the ride request is still available
+//  bool isAlreadyConfirmed = 3;
+//}
 
 service TaxiService {
   rpc addTaxi(TaxiAddRequest) returns (TaxiAddResponse);
   rpc removeTaxi(TaxiRemoveRequest) returns (google.protobuf.Empty);
   rpc changeRemoteTaxiDistrict(TaxiNewDistrictRequest) returns (google.protobuf.Empty);
-  rpc askRideRequestApproval(ElectionInfoRequest) returns (RideRequestApprovalResponse);
-  rpc updateRideRequestApproval(RideRequestUpdateRequest) returns (google.protobuf.Empty);
+  rpc forwardElectionIdOrTakeRide(RideElectionIdRequest) returns (google.protobuf.Empty);
+  rpc markElectionConfirmed(RideElectionConfirmRequest) returns (google.protobuf.Empty);
+//  rpc askRideRequestApproval(ElectionInfoRequest) returns (RideRequestApprovalResponse);
+//  rpc updateRideRequestApproval(RideRequestUpdateRequest) returns (google.protobuf.Empty);
 }
