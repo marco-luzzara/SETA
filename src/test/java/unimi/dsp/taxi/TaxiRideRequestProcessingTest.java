@@ -39,8 +39,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void givenOneTaxi_WhenARideIsPublishedInSameDistrict_ThenTheTaxiTakesItImmediately() throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
-                new Taxi.TaxiConfig().withRideDeliveryDelay(0), adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
@@ -57,7 +56,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void givenOneTaxi_WhenARideIsPublishedInDifferentDistrict_ThenTheTaxiIgnoresIt() throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
@@ -74,8 +73,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void givenOneTaxi_WhenARideIsPublished_ThenDrivesAndReduceBattery() throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
-                new Taxi.TaxiConfig().withRideDeliveryDelay(0), adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
@@ -93,8 +91,8 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void givenTwoTaxisInSameDistrict_WhenARideIsPublished_ThenOnlyOneTaxiTakesIt() throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0).generate(4, 4);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
-             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
@@ -115,9 +113,9 @@ public class TaxiRideRequestProcessingTest {
     public void given3TaxisInSameDistrict_WhenARideIsPublished_ThenTheNearestTaxiTakesIt() throws InterruptedException {
         new PositionGeneratorSetter()
                 .generate(0, 0).generate(3, 3).generate(4, 4);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
-             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService);
-             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService);
+             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, 0, adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
             taxi3.enterInSETANetwork();
@@ -141,11 +139,11 @@ public class TaxiRideRequestProcessingTest {
             throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(60), adminService);
+                    new Taxi.TaxiConfig().withInitialBatterylevel(60).withRideDeliveryDelay(0), adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(70), adminService);
+                    new Taxi.TaxiConfig().withInitialBatterylevel(70).withRideDeliveryDelay(0), adminService);
              Taxi taxi3 = FakeTaxiFactory.getTaxi(3,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(50), adminService)) {
+                    new Taxi.TaxiConfig().withInitialBatterylevel(50).withRideDeliveryDelay(0), adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
             taxi3.enterInSETANetwork();
@@ -168,9 +166,9 @@ public class TaxiRideRequestProcessingTest {
     public void given3TaxisDifferentFromIdOnly_WhenARideIsPublished_ThenTheTaxiWithTheHighestIdTakesIt()
             throws InterruptedException {
         new PositionGeneratorSetter().generate(0, 0);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, adminService);
-             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, adminService);
-             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService);
+             Taxi taxi3 = FakeTaxiFactory.getTaxi(3, 0, adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
             taxi3.enterInSETANetwork();
@@ -212,6 +210,30 @@ public class TaxiRideRequestProcessingTest {
     public void given2TaxisInSameDistrict_When2RidesArePublishedNearerToTheFirstTaxi_ThenTaxisTakeOneRideEach()
             throws InterruptedException {
         new PositionGeneratorSetter().generate(1, 1).generate(4, 4);
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 2000, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 2000, adminService)) {
+            taxi.enterInSETANetwork();
+            taxi2.enterInSETANetwork();
+
+            this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
+                confirmedRides.add(rideConfirm.getRideId());
+            });
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
+                    new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
+            this.setaServerPubSub.publishRideRequest(new RideRequestDto(1,
+                    new SmartCityPosition(0, 1), new SmartCityPosition(9, 0)));
+
+            Thread.sleep(500);
+            assertThat(this.confirmedRides).contains(0, 1);
+            assertThat(taxi.getTakenRides()).hasSize(1);
+            assertThat(taxi2.getTakenRides()).hasSize(1);
+        }
+    }
+
+    @Test
+    public void given2TaxisInSameDistrict_When2RidesArePublishedOneForEach_ThenTaxisTakeBoth()
+            throws InterruptedException {
+        new PositionGeneratorSetter().generate(1, 1).generate(4, 4);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
             taxi.enterInSETANetwork();
@@ -223,9 +245,9 @@ public class TaxiRideRequestProcessingTest {
             this.setaServerPubSub.publishRideRequest(new RideRequestDto(0,
                     new SmartCityPosition(2, 2), new SmartCityPosition(9, 0)));
             this.setaServerPubSub.publishRideRequest(new RideRequestDto(1,
-                    new SmartCityPosition(0, 1), new SmartCityPosition(9, 0)));
-            Thread.sleep(500);
+                    new SmartCityPosition(3, 3), new SmartCityPosition(9, 0)));
 
+            Thread.sleep(500);
             assertThat(this.confirmedRides).contains(0, 1);
             assertThat(taxi.getTakenRides()).hasSize(1);
             assertThat(taxi2.getTakenRides()).hasSize(1);

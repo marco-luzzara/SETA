@@ -99,24 +99,11 @@ public class NetworkTaxiConnection {
         TaxiServiceOuterClass.TaxiRemoveRequest request = TaxiServiceOuterClass.TaxiRemoveRequest.newBuilder()
                 .setId(this.taxi.getId())
                 .build();
-        TaxiServiceGrpc.newStub(this.channel.get()).removeTaxi(request, new StreamObserver<Empty>() {
-            @Override
-            public void onNext(Empty value) {
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                closeChannelIfNecessary();
-            }
-
-            @Override
-            public void onCompleted() {
-                closeChannelIfNecessary();
-            }
-        });
+        TaxiServiceGrpc.newBlockingStub(this.channel.get()).removeTaxi(request);
+        this.closeChannelIfNecessary();
     }
 
-    public void sendForwardElectionIdOrTakeRide(RideRequestDto rideRequest,
+    public boolean sendForwardElectionIdOrTakeRide(RideRequestDto rideRequest,
                                                  RideElectionInfo.RideElectionId rideRequestElectionId) {
         assert this.channel.isPresent();
 
@@ -132,33 +119,24 @@ public class NetworkTaxiConnection {
                 .setBatteryLevel(rideRequestElectionId.getBatteryLevel())
                 .build();
 
-        TaxiServiceGrpc.newStub(this.channel.get()).forwardElectionIdOrTakeRide(request,
-                new StreamObserver<Empty>() {
-                    @Override
-                    public void onNext(Empty value) {
-                        logger.info("Taxi {} sent ELECTION info for ride {} to taxi {}",
-                                taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId());
-                    }
+        boolean retry = TaxiServiceGrpc.newBlockingStub(this.channel.get())
+                .forwardElectionIdOrTakeRide(request).getRetry();
 
-                    @Override
-                    public void onError(Throwable t) {
-                        logger.error(
-                                String.format("ERROR: taxi %d is sending ELECTION info for ride %d to taxi %d",
-                                    taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId()), t);
-                    }
+        if (retry)
+            logger.info("Taxi {} cannot send ELECTION info for ride {} to taxi {} because in a new district",
+                    taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId());
+        else
+            logger.info("Taxi {} sent ELECTION info for ride {} to taxi {}, winning: {}",
+                    taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId(), rideRequestElectionId.getTaxiId());
 
-                    @Override
-                    public void onCompleted() {
-
-                    }
-                });
+        return retry;
     }
 
-    public void sendMarkElectionConfirmed(int rideRequestId) {
+    public void sendMarkElectionConfirmed(int rideRequestId, int taxiId) {
         assert this.channel.isPresent();
 
         TaxiServiceOuterClass.RideElectionConfirmRequest request = TaxiServiceOuterClass.RideElectionConfirmRequest
-                .newBuilder().setRideRequestId(rideRequestId).build();
+                .newBuilder().setRideRequestId(rideRequestId).setTaxiId(taxiId).build();
 
         TaxiServiceGrpc.newStub(this.channel.get()).markElectionConfirmed(request, new StreamObserver<Empty>() {
             @Override
@@ -178,6 +156,59 @@ public class NetworkTaxiConnection {
             public void onCompleted() {
             }
         });
+    }
+
+    public void sendAskRechargeRequestApproval() {
+        assert this.channel.isPresent();
+
+        TaxiServiceOuterClass.RechargeInfoRequest request = TaxiServiceOuterClass.RechargeInfoRequest
+                .newBuilder().setTaxiId(this.taxi.getId()).setRechargeTs(this.taxi.getLocalRechargeRequestTs())
+                .build();
+
+        TaxiServiceGrpc.newStub(this.channel.get()).askRechargeRequestApproval(request,
+                new StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse>() {
+                    @Override
+                    public void onNext(TaxiServiceOuterClass.RechargeInfoResponse value) {
+                        synchronized (NetworkTaxiConnection.this.taxi.getRechargeRequests()) {
+
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+
+                    }
+
+                    @Override
+                    public void onCompleted() {
+
+                    }
+        });
+    }
+
+    public void sendUpdateRechargeRequestApproval() {
+        assert this.channel.isPresent();
+
+        TaxiServiceOuterClass.RechargeApprovalRequest request = TaxiServiceOuterClass.RechargeApprovalRequest
+                .newBuilder().setTaxiId(this.taxi.getId()).build();
+
+        TaxiServiceGrpc.newStub(this.channel.get()).updateRechargeRequestApproval(request,
+                new StreamObserver<Empty>() {
+                    @Override
+                    public void onNext(Empty value) {
+
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+
+                    }
+
+                    @Override
+                    public void onCompleted() {
+
+                    }
+                });
     }
 
 //    public void sendAskRideRequestApproval(RideRequestDto rideRequest) {

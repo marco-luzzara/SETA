@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.model.RechargeRequest;
 import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
@@ -51,59 +52,57 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
     @Override
     public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest request, StreamObserver<Empty> responseObserver) {
-        // I cannot send an async grpc message because that thread is deleted once i send the response
-        // https://stackoverflow.com/questions/57110811/grpc-random-cancelled-exception-on-rpc-calls
-        Context ctx = Context.current().fork();
-        ctx.run(() -> {
-            this.taxi.getNetworkTaxiConnections().remove(request.getId());
-            this.restartElectionsIfNecessary(request.getId());
-        });
+        this.taxi.getNetworkTaxiConnections().remove(request.getId());
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }
 
     @Override
-    public synchronized void changeRemoteTaxiDistrict(TaxiServiceOuterClass.TaxiNewDistrictRequest request,
+    public void changeRemoteTaxiDistrict(TaxiServiceOuterClass.TaxiNewDistrictRequest request,
                                          StreamObserver<Empty> responseObserver) {
-        // I cannot send an async grpc message because that thread is deleted once i send the response
-        // https://stackoverflow.com/questions/57110811/grpc-random-cancelled-exception-on-rpc-calls
-        Context ctx = Context.current().fork();
-        ctx.run(() -> {
-            District remoteDistrict = District.fromPosition(
-                    new SmartCityPosition(request.getNewX(), request.getNewY()));
-            this.taxi.getNetworkTaxiConnections().get(request.getId())
-                    .setRemoteTaxiDistrict(remoteDistrict);
-            restartElectionsIfNecessary(request.getId());
-        });
+        District remoteDistrict = District.fromPosition(
+                new SmartCityPosition(request.getNewX(), request.getNewY()));
+        this.taxi.getNetworkTaxiConnections().get(request.getId())
+                .setRemoteTaxiDistrict(remoteDistrict);
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }
 
-    private void restartElectionsIfNecessary(int removedTaxiId) {
-        Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-        synchronized (rideRequestsMap) {
-            for (Map.Entry<RideRequestDto, RideElectionInfo> entry : rideRequestsMap.entrySet()) {
-                if (entry.getValue().getRideElectionId().getTaxiId() == removedTaxiId)
-                    this.taxi.forwardRideElectionIdIfNecessary(entry.getKey(), entry.getValue());
-            }
-        }
-    }
+//    private void restartElectionsIfNecessary(int removedTaxiId) {
+//        Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
+//        synchronized (rideRequestsMap) {
+//            for (Map.Entry<RideRequestDto, RideElectionInfo> entry : rideRequestsMap.entrySet()) {
+//                if (entry.getValue().getRideElectionId().getTaxiId() == removedTaxiId)
+//                    this.taxi.forwardRideElectionIdIfNecessary(
+//                            entry.getKey(), entry.getValue().getRideElectionId());
+//            }
+//        }
+//    }
 
     @Override
     public void forwardElectionIdOrTakeRide(TaxiServiceOuterClass.RideElectionIdRequest request,
-                                 StreamObserver<Empty> responseObserver) {
+                                 StreamObserver<TaxiServiceOuterClass.ForwardElectionIdResponse> responseObserver) {
+        RideRequestDto rideRequest = new RideRequestDto(request.getRideRequestId(),
+                new SmartCityPosition(request.getStartX(), request.getStartY()),
+                new SmartCityPosition(request.getEndX(), request.getEndY()));
+        RideElectionInfo.RideElectionId receivedElectionId = new RideElectionInfo.RideElectionId(
+                request.getTaxiId(), request.getDistanceFromSP(), request.getBatteryLevel());
+
+        // if the district changed message has not been processed yet, I do not want to involve
+        // other taxis in an election of another district
+        boolean retry = !District.fromPosition(rideRequest.getStart()).equals(this.taxi.getDistrict());
+        responseObserver.onNext(TaxiServiceOuterClass.ForwardElectionIdResponse.newBuilder()
+                .setRetry(retry)
+                .build());
+        responseObserver.onCompleted();
+
+        if (retry) return;
         // I cannot send an async grpc message because that thread is deleted once i send the response
         // https://stackoverflow.com/questions/57110811/grpc-random-cancelled-exception-on-rpc-calls
         Context ctx = Context.current().fork();
         ctx.run(() -> {
-            RideRequestDto rideRequest = new RideRequestDto(request.getRideRequestId(),
-                    new SmartCityPosition(request.getStartX(), request.getStartY()),
-                    new SmartCityPosition(request.getEndX(), request.getEndY()));
-            RideElectionInfo.RideElectionId receivedElectionId = new RideElectionInfo.RideElectionId(
-                    request.getTaxiId(), request.getDistanceFromSP(), request.getBatteryLevel());
-
             Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
             synchronized (rideRequestsMap) {
                 if (rideRequestsMap.containsKey(rideRequest) &&
@@ -124,9 +123,6 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                 }
             }
         });
-
-        responseObserver.onNext(Empty.getDefaultInstance());
-        responseObserver.onCompleted();
     }
 
     private void electionLogicWhenNotParticipant(RideRequestDto rideRequest,
@@ -145,67 +141,114 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         this.taxi.getRideRequestElectionsMap().put(rideRequest, new RideElectionInfo(
                 winningRideElectionId, RideElectionInfo.RideElectionState.ELECTION
         ));
-        this.taxi.getNextDistrictTaxiConnection().ifPresent(conn ->
-                conn.sendForwardElectionIdOrTakeRide(rideRequest, winningRideElectionId));
+        this.taxi.forwardRideElectionId(rideRequest, winningRideElectionId);
     }
 
     private void electionLogicWhenAlreadyParticipant(RideRequestDto rideRequest,
                                                      RideElectionInfo.RideElectionId receivedElectionId,
                                                      Map<RideRequestDto, RideElectionInfo> rideRequestsMap) {
         RideElectionInfo rideElectionInfo = rideRequestsMap.get(rideRequest);
-        // so forward if the election info id is greater, or take the ride if the token completed the ring
+        // forward if the election info id is greater
         if (receivedElectionId.isGreaterThan(rideElectionInfo.getRideElectionId())) {
             rideElectionInfo.setRideElectionId(receivedElectionId);
-            this.taxi.getNextDistrictTaxiConnection().ifPresent(conn ->
-                    conn.sendForwardElectionIdOrTakeRide(rideRequest, receivedElectionId));
+            this.taxi.forwardRideElectionId(rideRequest, receivedElectionId);
         } else if (receivedElectionId.equals(rideElectionInfo.getRideElectionId())) {
-            this.taxi.takeRideIfAvailable(rideRequest);
+            // take the ride if the received election id is the same as the stored on and the taxi id
+            // is the same too
+            if (rideElectionInfo.getRideElectionId().getTaxiId() == this.taxi.getId())
+                this.taxi.takeRideIfPossible(rideRequest);
+            else
+                // otherwise restart the election because the token already completed the ring
+                // but no taxi started the elected phase
+                this.taxi.forwardRideElectionIdOrTakeRide(rideRequest,
+                        createElectionIdFromRideRequest(rideRequest));
         }
+    }
+
+    private RideElectionInfo.RideElectionId createElectionIdFromRideRequest(RideRequestDto rideRequest) {
+        return new RideElectionInfo.RideElectionId(
+                this.taxi.getId(),
+                this.taxi.getDistanceFromRideStart(rideRequest),
+                this.taxi.getBatteryLevel());
     }
 
     private void electionLogicWhenUnavailable(TaxiServiceOuterClass.RideElectionIdRequest request,
                                               RideRequestDto rideRequest,
                                               RideElectionInfo.RideElectionId receivedElectionId) {
-        // i can forward the request only if the taxi id that started it is present in my
+        // I can forward the request only if the taxi id that started it is present in my
         // taxi network connections and it is not myself the owner of the ride request
-        if (this.taxi.getNetworkTaxiConnections().containsKey(request.getTaxiId()) &&
-                request.getTaxiId() != this.taxi.getId()) {
-            this.taxi.getNextDistrictTaxiConnection().ifPresent(conn ->
-                    conn.sendForwardElectionIdOrTakeRide(rideRequest, receivedElectionId));
-        }
+//        if (this.taxi.getNetworkTaxiConnections().containsKey(request.getTaxiId()) &&
+//                request.getTaxiId() != this.taxi.getId()) {
+        this.taxi.forwardRideElectionId(rideRequest, receivedElectionId);
+//        }
     }
 
     @Override
     public void markElectionConfirmed(TaxiServiceOuterClass.RideElectionConfirmRequest request,
                                       StreamObserver<Empty> responseObserver) {
-//        // I cannot send an async grpc message because that thread is deleted once i send the response
-//        // https://stackoverflow.com/questions/57110811/grpc-random-cancelled-exception-on-rpc-calls
-//        Context ctx = Context.current().fork();
-//        ctx.run(() -> {
-            int rideRequestId = request.getRideRequestId();
-            Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-            synchronized (rideRequestsMap) {
-                // I create a fake ride request containing the ride request only because i just need that
-                // in order to avoid re-election of already confirmed ride requests
-                rideRequestsMap.put(new RideRequestDto(rideRequestId, new SmartCityPosition(0, 0),
-                                new SmartCityPosition(0, 0)),
-                        new RideElectionInfo(null, RideElectionInfo.RideElectionState.ELECTED));
-//                Optional<RideRequestDto> optRideRequest = rideRequestsMap.keySet().stream()
-//                        .filter(rr -> rr.getId() == rideRequestId)
-//                        .findAny();
-//                optRideRequest.ifPresent(rr -> {
-//                    if (rideRequestsMap.get(rr).getRideElectionState()
-//                            .equals(RideElectionInfo.RideElectionState.ELECTION)) {
-//                        rideRequestsMap.get(rr).setRideElectionState(RideElectionInfo.RideElectionState.ELECTED);
-//                        taxi.getNextDistrictTaxiConnection()
-//                                .ifPresent(conn -> conn.sendMarkElectionConfirmed(rideRequestId));
-//                    }
-//                });
+        int rideRequestId = request.getRideRequestId();
+        Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
+        synchronized (rideRequestsMap) {
+            // I create a fake ride request containing the ride request only because I just need the id
+            // in order to avoid re-election of already confirmed ride requests
+            rideRequestsMap.put(new RideRequestDto(rideRequestId, new SmartCityPosition(0, 0),
+                            new SmartCityPosition(0, 0)),
+                    new RideElectionInfo(null, RideElectionInfo.RideElectionState.ELECTED));
+            // for all the other elections, if the taxi winning the election is the greater id in a current
+            // election, then that election is restarted
+            for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :
+                    this.taxi.getRideRequestElectionsMap().entrySet()) {
+                if (!rideElectionEntry.getValue().getRideElectionState()
+                        .equals(RideElectionInfo.RideElectionState.ELECTED) &&
+                        rideElectionEntry.getValue().getRideElectionId().getTaxiId() == request.getTaxiId()) {
+                    RideElectionInfo.RideElectionId newRideElectionId = createElectionIdFromRideRequest(
+                            rideElectionEntry.getKey());
+                    rideElectionEntry.getValue().setRideElectionId(newRideElectionId);
+                    this.taxi.forwardRideElectionIdOrTakeRide(rideElectionEntry.getKey(), newRideElectionId);
+                    logger.info("Election for ride {} is restarted by taxi {}",
+                            rideRequestId, this.taxi.getId());
+                }
             }
-//        });
+        }
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
+    }
+
+    @Override
+    public void askRechargeRequestApproval(TaxiServiceOuterClass.RechargeInfoRequest request,
+                                           StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse> responseObserver) {
+        synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
+            if (this.taxi.getStatus().equals(Taxi.TaxiStatus.RECHARGING)) {
+                this.taxi.getRechargeAwaitingTaxiIds().add(request.getTaxiId());
+                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                        .setOk(false).build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+            if (this.taxi.getStatus().equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
+                // if the ts are equal, the smaller taxi id wins, otherwise the winner is the
+                // request with the lower ts
+                boolean isRequestConfirmed = request.getRechargeTs() == this.taxi.getLocalRechargeRequestTs() ?
+                        this.taxi.getId() > request.getTaxiId() :
+                        this.taxi.getLocalRechargeRequestTs() > request.getRechargeTs();
+                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                        .setOk(isRequestConfirmed).build());
+                responseObserver.onCompleted();
+                return;
+                // TODO: complete recharge request info
+            }
+
+            responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                    .setOk(true).build());
+            responseObserver.onCompleted();
+        }
+    }
+
+    @Override
+    public void updateRechargeRequestApproval(TaxiServiceOuterClass.RechargeApprovalRequest request, StreamObserver<Empty> responseObserver) {
+        super.updateRechargeRequestApproval(request, responseObserver);
     }
 
     //    @Override
