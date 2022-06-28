@@ -92,6 +92,7 @@ public class SetaSystem implements Closeable {
         private final RideRequestDto rideRequest;
 
         public RideRequestPublisher(int district, RideRequestDto rideRequest) {
+            super();
             this.district = district;
             this.rideRequest = rideRequest;
         }
@@ -134,6 +135,7 @@ public class SetaSystem implements Closeable {
         private final int districtId;
 
         public DistrictPublisherThread(int districtId) {
+            super();
             this.districtId = districtId;
         }
 

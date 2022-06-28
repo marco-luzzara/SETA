@@ -168,15 +168,9 @@ public class NetworkTaxiConnection {
         TaxiServiceOuterClass.RechargeInfoResponse response = TaxiServiceGrpc.newBlockingStub(this.channel.get())
                 .askRechargeRequestApproval(request);
 
-        if (response.getOk()) {
-            synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
-                this.taxi.getRechargeDeniedTaxiIds().add(this.remoteTaxiInfo.getId());
-            }
-        }
-        else {
-            synchronized (this.taxi.getRechargeApprovedTaxiIds()) {
-                this.taxi.getRechargeApprovedTaxiIds().add(this.remoteTaxiInfo.getId());
-            }
+        synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
+            if (!response.getOk())
+                this.taxi.getRechargeAwaitingTaxiIds().add(this.remoteTaxiInfo.getId());
         }
     }
 
@@ -190,17 +184,19 @@ public class NetworkTaxiConnection {
                 new StreamObserver<Empty>() {
                     @Override
                     public void onNext(Empty value) {
-
+                        logger.info("Taxi {} sent RECHARGE-FREE update to taxi {}",
+                                taxi.getId(), remoteTaxiInfo.getId());
                     }
 
                     @Override
                     public void onError(Throwable t) {
-
+                        logger.error(
+                                String.format("ERROR: taxi %d cannot send RECHARGE-FREE update to taxi %d",
+                                        taxi.getId(), remoteTaxiInfo.getId()), t);
                     }
 
                     @Override
                     public void onCompleted() {
-
                     }
                 });
     }

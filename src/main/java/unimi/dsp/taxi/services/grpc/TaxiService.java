@@ -129,10 +129,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                                                  RideElectionInfo.RideElectionId receivedElectionId) {
         // not a participant yet, forward the received request or the current election info
         // based on the greater id
-        RideElectionInfo.RideElectionId thisRideElectionId = new RideElectionInfo.RideElectionId(
-                this.taxi.getId(),
-                this.taxi.getDistanceFromRideStart(rideRequest),
-                this.taxi.getBatteryLevel());
+        RideElectionInfo.RideElectionId thisRideElectionId = this.createElectionIdFromRideRequest(rideRequest);
         // it cannot be equal, otherwise there entry would exist already
         RideElectionInfo.RideElectionId winningRideElectionId =
                 thisRideElectionId.isGreaterThan(receivedElectionId) ?
@@ -168,7 +165,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     private RideElectionInfo.RideElectionId createElectionIdFromRideRequest(RideRequestDto rideRequest) {
         return new RideElectionInfo.RideElectionId(
                 this.taxi.getId(),
-                this.taxi.getDistanceFromRideStart(rideRequest),
+                this.taxi.getDistanceFromPosition(rideRequest.getStart()),
                 this.taxi.getBatteryLevel());
     }
 
@@ -220,13 +217,10 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                                            StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse> responseObserver) {
         Taxi.TaxiStatus status = this.taxi.getStatus();
         if (status.equals(Taxi.TaxiStatus.RECHARGING)) {
-            synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
-                this.taxi.getRechargeDeniedTaxiIds().add(request.getTaxiId());
-                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                        .setOk(false).build());
-                responseObserver.onCompleted();
-                return;
-            }
+            responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                    .setOk(false).build());
+            responseObserver.onCompleted();
+            return;
         }
 
         if (status.equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
@@ -236,17 +230,6 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
             boolean isRequestConfirmed = request.getRechargeTs() == rechargeTs ?
                     this.taxi.getId() > request.getTaxiId() :
                     rechargeTs > request.getRechargeTs();
-
-            if (isRequestConfirmed) {
-                synchronized (this.taxi.getRechargeApprovedTaxiIds()) {
-                    this.taxi.getRechargeApprovedTaxiIds().add(request.getTaxiId());
-                }
-            }
-            else {
-                synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
-                    this.taxi.getRechargeDeniedTaxiIds().add(request.getTaxiId());
-                }
-            }
 
             responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
                     .setOk(isRequestConfirmed).build());
@@ -261,8 +244,22 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     }
 
     @Override
-    public void updateRechargeRequestApproval(TaxiServiceOuterClass.RechargeApprovalRequest request, StreamObserver<Empty> responseObserver) {
-        super.updateRechargeRequestApproval(request, responseObserver);
+    public void updateRechargeRequestApproval(TaxiServiceOuterClass.RechargeApprovalRequest request,
+                                              StreamObserver<Empty> responseObserver) {
+        if (!this.taxi.getStatus().equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
+            responseObserver.onNext(Empty.getDefaultInstance());
+            responseObserver.onCompleted();
+            return;
+        }
+
+        synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
+            this.taxi.getRechargeAwaitingTaxiIds().remove(request.getTaxiId());
+        }
+
+        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onCompleted();
+
+        this.taxi.accessTheRechargeStationIfPossible();
     }
 
     //    @Override

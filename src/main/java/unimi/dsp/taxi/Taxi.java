@@ -14,7 +14,6 @@ import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
-import unimi.dsp.model.RechargeRequest;
 import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
@@ -23,7 +22,7 @@ import unimi.dsp.taxi.services.mqtt.SETATaxiPubSub;
 import unimi.dsp.taxi.services.rest.AdminService;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
-import unimi.dsp.util.SynchronizationUtils;
+import unimi.dsp.util.ConcurrencyUtils;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -49,10 +48,7 @@ public class Taxi implements Closeable  {
     private long localRechargeRequestTs;
     // I have approved the requests coming from these taxis. this means that I cannot recharge
     // until I get back an OK from them (if I have approved them it means they have the priority).
-    private Set<Integer> rechargeApprovedTaxiIds;
-    // I have denied the requests coming from these taxis because I have the priority over them.
-    // They can recharge once they get my OK
-    private Set<Integer> rechargeDeniedTaxiIds;
+    private Set<Integer> rechargeAwaitingTaxiIds;
     // the key of the outer map represents the ride request, while the key of the inner map
     // is the currently greater Id of that election
     private final Map<RideRequestDto, RideElectionInfo> rideRequestElectionsMap;
@@ -78,9 +74,9 @@ public class Taxi implements Closeable  {
         this.setaPubSub = setaPubSub;
         this.batteryLevel = this.taxiConfig.initialBatteryLevel;
         this.status = TaxiStatus.UNSTARTED;
-        this.networkTaxis = SynchronizationUtils.makeSynchronized(Map.class,
+        this.networkTaxis = ConcurrencyUtils.makeSynchronized(Map.class,
                 new HashMap<Integer, NetworkTaxiConnection>());
-        this.rideRequestElectionsMap = SynchronizationUtils.makeSynchronized(Map.class,
+        this.rideRequestElectionsMap = ConcurrencyUtils.makeSynchronized(Map.class,
                 new HashMap<RideRequestDto, RideElectionInfo>());
     }
 
@@ -112,21 +108,21 @@ public class Taxi implements Closeable  {
         return takenRides;
     }
 
-    public synchronized long getLocalRechargeRequestTs() {
-        assert this.getStatus().equals(TaxiStatus.RECHARGING);
+    public long getLocalRechargeRequestTs() {
+        assert this.status.equals(TaxiStatus.WAITING_TO_RECHARGE) ||
+                this.status.equals(TaxiStatus.RECHARGING);
         return localRechargeRequestTs;
     }
 
-    public Set<Integer> getRechargeApprovedTaxiIds() {
-        return rechargeApprovedTaxiIds;
-    }
-
-    public Set<Integer> getRechargeDeniedTaxiIds() {
-        return rechargeDeniedTaxiIds;
+    public Set<Integer> getRechargeAwaitingTaxiIds() {
+        return rechargeAwaitingTaxiIds;
     }
 
     public District getDistrict() {
-        return District.fromPosition(new SmartCityPosition(this.x, this.y));
+        return District.fromPosition(this.getPosition());
+    }
+    public SmartCityPosition getPosition() {
+        return new SmartCityPosition(this.x, this.y);
     }
 
     public Map<Integer, NetworkTaxiConnection> getNetworkTaxiConnections() {
@@ -137,9 +133,9 @@ public class Taxi implements Closeable  {
         return rideRequestElectionsMap;
     }
 
-    public double getDistanceFromRideStart(RideRequestDto rideRequest) {
-        double deltaX = this.getX() - rideRequest.getStart().x;
-        double deltaY = this.getY() - rideRequest.getStart().y;
+    public double getDistanceFromPosition(SmartCityPosition position) {
+        double deltaX = this.getX() - position.x;
+        double deltaY = this.getY() - position.y;
         return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
@@ -195,7 +191,8 @@ public class Taxi implements Closeable  {
                 this.id, this.status.toString(), status.toString());
         this.status = status;
         // necessary to unlock a quit or recharge command if pending
-        this.notifyAll();
+        if (!this.status.equals(TaxiStatus.RECHARGING) && !this.status.equals(TaxiStatus.DRIVING))
+            this.notify();
     }
 
     public synchronized TaxiStatus getStatus() {
@@ -243,13 +240,60 @@ public class Taxi implements Closeable  {
         logger.info("Taxi {} presented itself to the other taxis", this.id);
     }
 
-    public void tryAccessTheStation() {
-        this.rechargeDeniedTaxiIds = new HashSet<>();
-        this.rechargeApprovedTaxiIds = new HashSet<>();
+    public synchronized void askForTheRechargeStation() {
+        if (this.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE) ||
+                this.getStatus().equals(TaxiStatus.RECHARGING))
+            return;
+
+        this.setStatus(TaxiStatus.WAITING_TO_RECHARGE);
+
+        this.rechargeAwaitingTaxiIds = new HashSet<>();
         this.localRechargeRequestTs = System.currentTimeMillis();
-        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
-            taxiConnection.
+        NetworkTaxiConnection[] taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length, (i) -> {
+            taxiConnections[i].sendAskRechargeRequestApproval();
+        });
+
+        this.accessTheRechargeStationIfPossible();
+    }
+
+    public synchronized void accessTheRechargeStationIfPossible() {
+        if (!this.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE))
+            return;
+
+        synchronized (this.getRechargeAwaitingTaxiIds()) {
+            if (!this.getRechargeAwaitingTaxiIds().isEmpty())
+                return;
         }
+
+        this.setStatus(TaxiStatus.RECHARGING);
+        this.batteryLevel -= this.getDistanceFromPosition(this.getDistrict().getRechargeStationPosition()) *
+                this.taxiConfig.batteryConsumptionPerKm;
+        SmartCityPosition rechargeStationPosition = this.getDistrict().getRechargeStationPosition();
+        this.x = rechargeStationPosition.x;
+        this.y = rechargeStationPosition.y;
+        Thread t = new Thread(() -> {
+            try {
+                Thread.sleep(this.taxiConfig.rechargeDelay);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            // synchronize the entire block because I do not want the taxi to exit
+            // before informing the other taxis too
+            synchronized (this) {
+                this.batteryLevel = this.taxiConfig.initialBatteryLevel;
+                this.setStatus(TaxiStatus.AVAILABLE);
+                this.informOtherTaxisRechargeStationIsFree();
+            }
+        });
+        t.start();
+    }
+
+    public void informOtherTaxisRechargeStationIsFree() {
+        NetworkTaxiConnection[] taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length, (i) -> {
+            taxiConnections[i].sendUpdateRechargeRequestApproval();
+        });
     }
 
     // synchronized on this object because it is a possible status changing method
@@ -288,7 +332,7 @@ public class Taxi implements Closeable  {
             throw new RuntimeException(e);
         }
 
-        this.batteryLevel -= (getDistanceFromRideStart(rideRequest) +
+        this.batteryLevel -= (this.getDistanceFromPosition(rideRequest.getStart()) +
                 Taxi.getDistanceBetweenRideStartAndEnd(rideRequest)) * this.taxiConfig.batteryConsumptionPerKm;
         this.x = rideRequest.getEnd().x;
         this.y = rideRequest.getEnd().y;
@@ -299,9 +343,8 @@ public class Taxi implements Closeable  {
             this.subscribeToDistrictTopic();
         }
         // TODO: check if recharge
-        if (this.batteryLevel < this.taxiConfig.batteryThresholdBeforeRecharge) {
-            this.setStatus(TaxiStatus.RECHARGING);
-        }
+        if (this.batteryLevel < this.taxiConfig.batteryThresholdBeforeRecharge)
+            this.askForTheRechargeStation();
         else
             this.setStatus(TaxiStatus.AVAILABLE);
     }
@@ -339,7 +382,7 @@ public class Taxi implements Closeable  {
 
                     RideElectionInfo rideElectionInfo = new RideElectionInfo(
                             new RideElectionInfo.RideElectionId(this.id,
-                                    this.getDistanceFromRideStart(rideRequest),
+                                    this.getDistanceFromPosition(rideRequest.getStart()),
                                     this.batteryLevel),
                             RideElectionInfo.RideElectionState.ELECTION);
                     rideRequestElectionsMap.put(rideRequest, rideElectionInfo);
@@ -377,11 +420,6 @@ public class Taxi implements Closeable  {
         } while (retry);
     }
 
-    // synchronized on this object because it is a possibly status changing method
-    public synchronized void goToRechargeStationIfPossible() {
-//        synchronized ()
-    }
-
     void unsubscribeFromDistrictTopic() {
         this.setaPubSub.unsubscribeFromDistrictTopic(this.getDistrict());
         logger.info("Taxi {} unsubscribed from district {}", this.id, this.getDistrict());
@@ -392,7 +430,7 @@ public class Taxi implements Closeable  {
             taxiConnection.sendRemoveTaxi();
         }
 
-        this.networkTaxis = SynchronizationUtils.makeSynchronized(Map.class,
+        this.networkTaxis = ConcurrencyUtils.makeSynchronized(Map.class,
                 new HashMap<Integer, NetworkTaxiConnection>());
         logger.info("Taxi {} informed other taxis that it exited from the network", this.id);
     }
@@ -424,6 +462,18 @@ public class Taxi implements Closeable  {
                 return;
             }
 
+            synchronized (this) {
+                while (this.getStatus().equals(TaxiStatus.RECHARGING) ||
+                        this.getStatus().equals(TaxiStatus.DRIVING)) {
+                    try {
+                        this.wait();
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+
+            this.informOtherTaxisRechargeStationIsFree();
             this.informOtherTaxisAboutExitingFromTheNetwork();
             this.unsubscribeFromDistrictTopic();
             this.unregisterFromServer();
@@ -518,30 +568,16 @@ public class Taxi implements Closeable  {
                 String command = scanner.nextLine();
 
                 if (command.equals(QUIT_COMMAND)) {
-                    synchronized (taxi) {
-                        while (!taxi.getStatus().equals(TaxiStatus.AVAILABLE)) {
-                            try {
-                                taxi.wait();
-                            } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-
-                        // by returning, the "close" method is automatically called
-                        break;
-                    }
+                    break;
                 }
                 else if (command.equals(RECHARGE_COMMAND)) {
                     synchronized (taxi) {
-                        while (!taxi.getStatus().equals(TaxiStatus.AVAILABLE)) {
-                            try {
-                                taxi.wait();
-                            } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
-                            }
+                        if (taxi.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE) ||
+                                taxi.getStatus().equals(TaxiStatus.RECHARGING)) {
+                            System.out.println("The taxi is recharging or is waiting for it");
                         }
-
-                        taxi.goToRechargeStationIfPossible();
+                        taxi.askForTheRechargeStation();
+                        System.out.println("Taxi will go to the recharge station as soon as possible");
                     }
                 }
                 else {

@@ -5,14 +5,16 @@ import unimi.dsp.util.ConfigurationManager;
 import java.util.Arrays;
 
 public enum District {
-    TOP_LEFT(1),
-    TOP_RIGHT(2),
-    BOTTOM_LEFT(3),
-    BOTTOM_RIGHT(4);
+    TOP_LEFT(1, new SmartCityPosition(0, 0)),
+    TOP_RIGHT(2, new SmartCityPosition(9, 0)),
+    BOTTOM_LEFT(3, new SmartCityPosition(0, 9)),
+    BOTTOM_RIGHT(4, new SmartCityPosition(9, 9));
 
     private final int districtValue;
-    District(int districtValue) {
+    private final SmartCityPosition rechargeStationPosition;
+    District(int districtValue, SmartCityPosition rechargeStationPosition) {
         this.districtValue = districtValue;
+        this.rechargeStationPosition = rechargeStationPosition;
     }
 
     @Override
@@ -28,18 +30,17 @@ public enum District {
             if (position.y < smartCityMaxHeight / 2)
                 return District.TOP_LEFT;
             else
-                return District.TOP_RIGHT;
+                return District.BOTTOM_LEFT;
         }
         else {
             if (position.y < smartCityMaxHeight / 2)
-                return District.BOTTOM_LEFT;
+                return District.TOP_RIGHT;
             else
                 return District.BOTTOM_RIGHT;
         }
     }
 
-//    public static District fromId(int id) {
-//        return Arrays.stream(District.values()).filter(d -> d.districtValue == id)
-//                .findAny().orElseThrow(() -> new IllegalStateException("id specified not found: " + id));
-//    }
+    public SmartCityPosition getRechargeStationPosition() {
+        return rechargeStationPosition;
+    }
 }

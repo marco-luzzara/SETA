@@ -4,7 +4,6 @@ import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.stubbing.OngoingStubbing;
 import unimi.dsp.SETA.SETAServerPubSubBase;
 import unimi.dsp.SETA.services.SETAServerPubSub;
 import unimi.dsp.adminServer.services.TaxiPositionGenerator;
@@ -13,6 +12,7 @@ import unimi.dsp.fakeFactories.FakeTaxiFactory;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.stubs.AdminServiceStub;
+import unimi.dsp.testUtils.mocks.PositionGeneratorMock;
 import unimi.dsp.util.MQTTClientFactory;
 
 import java.util.ArrayList;
@@ -27,6 +27,8 @@ public class TaxiRideRequestProcessingTest {
     private final AdminServiceBase adminService = new AdminServiceStub(taxiPositionGenerator);
     private final MqttAsyncClient mqttClient = MQTTClientFactory.getClient();
     private final SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(mqttClient);
+    private final PositionGeneratorMock positionGeneratorMock = new PositionGeneratorMock(
+            when(taxiPositionGenerator.getStartingPosition()));
 
     private List<Integer> confirmedRides = new ArrayList<>();
 
@@ -38,7 +40,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void givenOneTaxi_WhenARideIsPublishedInSameDistrict_ThenTheTaxiTakesItImmediately() throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
@@ -55,7 +57,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void givenOneTaxi_WhenARideIsPublishedInDifferentDistrict_ThenTheTaxiIgnoresIt() throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
@@ -72,7 +74,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void givenOneTaxi_WhenARideIsPublished_ThenDrivesAndReduceBattery() throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
@@ -90,7 +92,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void givenTwoTaxisInSameDistrict_WhenARideIsPublished_ThenOnlyOneTaxiTakesIt() throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0).generate(4, 4);
+        positionGeneratorMock.generate(0, 0).generate(4, 4);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
             taxi.enterInSETANetwork();
@@ -111,7 +113,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void given3TaxisInSameDistrict_WhenARideIsPublished_ThenTheNearestTaxiTakesIt() throws InterruptedException {
-        new PositionGeneratorSetter()
+        positionGeneratorMock
                 .generate(0, 0).generate(3, 3).generate(4, 4);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService);
@@ -137,7 +139,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void given3TaxisEquallyDistantToARide_WhenARideIsPublished_ThenTheTaxiWithTheHighestBatteryTakesIt()
             throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
                     new Taxi.TaxiConfig().withInitialBatterylevel(60).withRideDeliveryDelay(0), adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2,
@@ -165,7 +167,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void given3TaxisDifferentFromIdOnly_WhenARideIsPublished_ThenTheTaxiWithTheHighestIdTakesIt()
             throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService);
              Taxi taxi3 = FakeTaxiFactory.getTaxi(3, 0, adminService)) {
@@ -189,7 +191,7 @@ public class TaxiRideRequestProcessingTest {
 
     @Test
     public void givenATaxi_WhenTheRideDPIsInAnotherDistrict_ThenChangeDistrict() throws InterruptedException {
-        new PositionGeneratorSetter().generate(0, 0);
+        positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService)) {
             taxi.enterInSETANetwork();
 
@@ -209,7 +211,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void given2TaxisInSameDistrict_When2RidesArePublishedNearerToTheFirstTaxi_ThenTaxisTakeOneRideEach()
             throws InterruptedException {
-        new PositionGeneratorSetter().generate(1, 1).generate(4, 4);
+        positionGeneratorMock.generate(1, 1).generate(4, 4);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 2000, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 2000, adminService)) {
             taxi.enterInSETANetwork();
@@ -233,7 +235,7 @@ public class TaxiRideRequestProcessingTest {
     @Test
     public void given2TaxisInSameDistrict_When2RidesArePublishedOneForEach_ThenTaxisTakeBoth()
             throws InterruptedException {
-        new PositionGeneratorSetter().generate(1, 1).generate(4, 4);
+        positionGeneratorMock.generate(1, 1).generate(4, 4);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
             taxi.enterInSETANetwork();
@@ -264,17 +266,6 @@ public class TaxiRideRequestProcessingTest {
 //                });
 //    }
 
-    private class PositionGeneratorSetter {
-        OngoingStubbing<SmartCityPosition> ongoingStubbing;
-        public PositionGeneratorSetter() {
-            this.ongoingStubbing = when(taxiPositionGenerator.getStartingPosition());
-        }
-
-        public PositionGeneratorSetter generate(int startX, int startY) {
-            this.ongoingStubbing = this.ongoingStubbing.thenReturn(new SmartCityPosition(startX, startY));
-            return this;
-        }
-    }
 //    private void mockAdminServicePositionGeneration(int startX, int startY) {
 //        when(taxiPositionGenerator.getStartingPosition()).argThat(new TaxiInfoDtoIsEqualGivenIdMatcher(taxiId))))
 //                .thenAnswer(a -> {
