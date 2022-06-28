@@ -218,32 +218,46 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     @Override
     public void askRechargeRequestApproval(TaxiServiceOuterClass.RechargeInfoRequest request,
                                            StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse> responseObserver) {
-        synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
-            if (this.taxi.getStatus().equals(Taxi.TaxiStatus.RECHARGING)) {
-                this.taxi.getRechargeAwaitingTaxiIds().add(request.getTaxiId());
+        Taxi.TaxiStatus status = this.taxi.getStatus();
+        if (status.equals(Taxi.TaxiStatus.RECHARGING)) {
+            synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
+                this.taxi.getRechargeDeniedTaxiIds().add(request.getTaxiId());
                 responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
                         .setOk(false).build());
                 responseObserver.onCompleted();
                 return;
             }
+        }
 
-            if (this.taxi.getStatus().equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
-                // if the ts are equal, the smaller taxi id wins, otherwise the winner is the
-                // request with the lower ts
-                boolean isRequestConfirmed = request.getRechargeTs() == this.taxi.getLocalRechargeRequestTs() ?
-                        this.taxi.getId() > request.getTaxiId() :
-                        this.taxi.getLocalRechargeRequestTs() > request.getRechargeTs();
-                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                        .setOk(isRequestConfirmed).build());
-                responseObserver.onCompleted();
-                return;
-                // TODO: complete recharge request info
+        if (status.equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
+            long rechargeTs = this.taxi.getLocalRechargeRequestTs();
+            // if the ts are equal, the smaller taxi id wins, otherwise the winner is the
+            // request with the lower ts
+            boolean isRequestConfirmed = request.getRechargeTs() == rechargeTs ?
+                    this.taxi.getId() > request.getTaxiId() :
+                    rechargeTs > request.getRechargeTs();
+
+            if (isRequestConfirmed) {
+                synchronized (this.taxi.getRechargeApprovedTaxiIds()) {
+                    this.taxi.getRechargeApprovedTaxiIds().add(request.getTaxiId());
+                }
+            }
+            else {
+                synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
+                    this.taxi.getRechargeDeniedTaxiIds().add(request.getTaxiId());
+                }
             }
 
             responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                    .setOk(true).build());
+                    .setOk(isRequestConfirmed).build());
             responseObserver.onCompleted();
+            return;
         }
+
+        // if not recharging or waiting to recharge it is not interested and sends back true
+        responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                .setOk(true).build());
+        responseObserver.onCompleted();
     }
 
     @Override

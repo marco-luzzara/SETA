@@ -165,25 +165,19 @@ public class NetworkTaxiConnection {
                 .newBuilder().setTaxiId(this.taxi.getId()).setRechargeTs(this.taxi.getLocalRechargeRequestTs())
                 .build();
 
-        TaxiServiceGrpc.newStub(this.channel.get()).askRechargeRequestApproval(request,
-                new StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse>() {
-                    @Override
-                    public void onNext(TaxiServiceOuterClass.RechargeInfoResponse value) {
-                        synchronized (NetworkTaxiConnection.this.taxi.getRechargeRequests()) {
+        TaxiServiceOuterClass.RechargeInfoResponse response = TaxiServiceGrpc.newBlockingStub(this.channel.get())
+                .askRechargeRequestApproval(request);
 
-                        }
-                    }
-
-                    @Override
-                    public void onError(Throwable t) {
-
-                    }
-
-                    @Override
-                    public void onCompleted() {
-
-                    }
-        });
+        if (response.getOk()) {
+            synchronized (this.taxi.getRechargeDeniedTaxiIds()) {
+                this.taxi.getRechargeDeniedTaxiIds().add(this.remoteTaxiInfo.getId());
+            }
+        }
+        else {
+            synchronized (this.taxi.getRechargeApprovedTaxiIds()) {
+                this.taxi.getRechargeApprovedTaxiIds().add(this.remoteTaxiInfo.getId());
+            }
+        }
     }
 
     public void sendUpdateRechargeRequestApproval() {

@@ -47,7 +47,12 @@ public class Taxi implements Closeable  {
     private Set<Integer> takenRides = new HashSet<>();
     // recharging
     private long localRechargeRequestTs;
-    private Set<Integer> rechargeAwaitingTaxiIds;
+    // I have approved the requests coming from these taxis. this means that I cannot recharge
+    // until I get back an OK from them (if I have approved them it means they have the priority).
+    private Set<Integer> rechargeApprovedTaxiIds;
+    // I have denied the requests coming from these taxis because I have the priority over them.
+    // They can recharge once they get my OK
+    private Set<Integer> rechargeDeniedTaxiIds;
     // the key of the outer map represents the ride request, while the key of the inner map
     // is the currently greater Id of that election
     private final Map<RideRequestDto, RideElectionInfo> rideRequestElectionsMap;
@@ -107,13 +112,17 @@ public class Taxi implements Closeable  {
         return takenRides;
     }
 
-    public long getLocalRechargeRequestTs() {
+    public synchronized long getLocalRechargeRequestTs() {
         assert this.getStatus().equals(TaxiStatus.RECHARGING);
         return localRechargeRequestTs;
     }
 
-    public Set<Integer> getRechargeAwaitingTaxiIds() {
-        return rechargeAwaitingTaxiIds;
+    public Set<Integer> getRechargeApprovedTaxiIds() {
+        return rechargeApprovedTaxiIds;
+    }
+
+    public Set<Integer> getRechargeDeniedTaxiIds() {
+        return rechargeDeniedTaxiIds;
     }
 
     public District getDistrict() {
@@ -235,7 +244,8 @@ public class Taxi implements Closeable  {
     }
 
     public void tryAccessTheStation() {
-        this.rechargeAwaitingTaxiIds = new HashSet<>();
+        this.rechargeDeniedTaxiIds = new HashSet<>();
+        this.rechargeApprovedTaxiIds = new HashSet<>();
         this.localRechargeRequestTs = System.currentTimeMillis();
         for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
             taxiConnection.
@@ -339,10 +349,6 @@ public class Taxi implements Closeable  {
             }
         });
         logger.info("Taxi {} subscribed to district topic {}", Taxi.this.id, Taxi.this.getDistrict());
-
-        // I am assuming that SETA time and current taxi time are synchronized
-        // TODO: necessary?
-        this.subscriptionTs = System.currentTimeMillis();
     }
 
     public synchronized void forwardRideElectionIdOrTakeRide(RideRequestDto rideRequest,
