@@ -3,8 +3,10 @@ package unimi.dsp.taxi.services.rest;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.GenericType;
+import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
+import unimi.dsp.dto.TaxiStatisticsDto;
 import unimi.dsp.taxi.AdminServiceBase;
 import unimi.dsp.util.RestUtil;
 
@@ -21,7 +23,7 @@ public class AdminService implements AdminServiceBase {
 
     @Override
     public NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo) {
-        ClientResponse response = RestUtil.postRequest(this.client, this.serverEndpoint + "/taxis", taxiInfo);
+        ClientResponse response = RestUtil.sendPostRequest(this.client, this.serverEndpoint + "/taxis", taxiInfo);
         if (response.getStatus() == Response.Status.CONFLICT.getStatusCode())
             throw new IllegalStateException("Taxi cannot register because another taxi has the same id");
 
@@ -35,5 +37,14 @@ public class AdminService implements AdminServiceBase {
         int statusCode = response.getStatus();
         if (statusCode != Response.Status.OK.getStatusCode())
             throw new IllegalStateException("The taxi did not unregister correctly, status code: " + statusCode);
+    }
+
+    @Override
+    public void loadTaxiStatistics(int taxiId, TaxiStatisticsDto taxiStatistics) {
+        ClientResponse response = RestUtil.sendPostRequest(this.client,
+                String.format("%s/taxis/%d/statistics", this.serverEndpoint, taxiId), taxiStatistics);
+        int statusCode = response.getStatus();
+        if (statusCode != Response.Status.OK.getStatusCode())
+            throw new IllegalStateException("The taxi could not send statistics, status code: " + statusCode);
     }
 }

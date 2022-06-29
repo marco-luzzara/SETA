@@ -17,9 +17,14 @@ import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
+import unimi.dsp.sensors.Buffer;
+import unimi.dsp.sensors.SlidingWindowBuffer;
+import unimi.dsp.sensors.simulators.PM10Simulator;
+import unimi.dsp.sensors.simulators.Simulator;
 import unimi.dsp.taxi.services.grpc.TaxiService;
 import unimi.dsp.taxi.services.mqtt.SETATaxiPubSub;
 import unimi.dsp.taxi.services.rest.AdminService;
+import unimi.dsp.taxi.services.stats.StatsCollectorThread;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
 import unimi.dsp.util.ConcurrencyUtils;
@@ -37,13 +42,12 @@ public class Taxi implements Closeable  {
     private final String host;
     private final int port;
     private final TaxiConfig taxiConfig;
-    private int batteryLevel;
+    private volatile int batteryLevel;
     private int x;
     private int y;
     // map that associate a taxi id with a connection to the corresponding taxi in the network
     private Map<Integer, NetworkTaxiConnection> networkTaxis;
     private TaxiStatus status;
-    private Set<Integer> takenRides = new HashSet<>();
     // recharging
     private long localRechargeRequestTs;
     // I have approved the requests coming from these taxis. this means that I cannot recharge
@@ -52,6 +56,12 @@ public class Taxi implements Closeable  {
     // the key of the outer map represents the ride request, while the key of the inner map
     // is the currently greater Id of that election
     private final Map<RideRequestDto, RideElectionInfo> rideRequestElectionsMap;
+
+    // statistics
+    private Simulator pollutionDataProvider;
+    private Thread pollutionCollectingThread;
+    private volatile double kmsTraveled = 0;
+    private final Set<Integer> takenRides;
 
     // for grpc communication
     private Server grpcServer;
@@ -73,11 +83,21 @@ public class Taxi implements Closeable  {
         this.adminService = adminService;
         this.setaPubSub = setaPubSub;
         this.batteryLevel = this.taxiConfig.initialBatteryLevel;
+        this.takenRides = new HashSet<>();
         this.status = TaxiStatus.UNSTARTED;
         this.networkTaxis = ConcurrencyUtils.makeSynchronized(Map.class,
                 new HashMap<Integer, NetworkTaxiConnection>());
         this.rideRequestElectionsMap = ConcurrencyUtils.makeSynchronized(Map.class,
                 new HashMap<RideRequestDto, RideElectionInfo>());
+        Buffer buffer = new SlidingWindowBuffer(taxiConfig.slidingWindowBufferSize,
+                taxiConfig.slidingWindowOverlappingFactor);
+        this.initializeSimulator(buffer);
+        this.pollutionCollectingThread = new StatsCollectorThread(buffer,
+                taxiConfig.statsLoadingDelay, this, this.adminService);
+    }
+
+    void initializeSimulator(Buffer buffer) {
+        this.pollutionDataProvider = new PM10Simulator(buffer);
     }
 
     public int getId() {
@@ -106,6 +126,10 @@ public class Taxi implements Closeable  {
 
     public Set<Integer> getTakenRides() {
         return takenRides;
+    }
+
+    public double getKmsTraveled() {
+        return kmsTraveled;
     }
 
     public long getLocalRechargeRequestTs() {
@@ -178,12 +202,28 @@ public class Taxi implements Closeable  {
         this.setStatus(TaxiStatus.GRPC_STARTED);
         this.registerToServer();
         this.setStatus(TaxiStatus.REGISTERED);
+        this.startCollectingPollutionData();
         this.informOtherTaxisAboutEnteringTheNetwork();
         this.subscribeToDistrictTopic();
         if (this.batteryLevel < this.taxiConfig.batteryThresholdBeforeRecharge)
             this.setStatus(TaxiStatus.WAITING_TO_RECHARGE);
         else
             this.setStatus(TaxiStatus.AVAILABLE);
+    }
+
+    public void clearStatistics() {
+        // I do not need to synchronize in this because it is volatile and assignment is
+        // not based on previous state of object
+        this.kmsTraveled = 0;
+
+        synchronized (this.takenRides) {
+            takenRides.clear();
+        }
+    }
+
+    private void startCollectingPollutionData() {
+        this.pollutionDataProvider.start();
+        this.pollutionCollectingThread.start();
     }
 
     public synchronized void setStatus(TaxiStatus status) {
@@ -267,7 +307,10 @@ public class Taxi implements Closeable  {
         }
 
         this.setStatus(TaxiStatus.RECHARGING);
-        this.batteryLevel -= this.getDistanceFromPosition(this.getDistrict().getRechargeStationPosition()) *
+        double distanceFromRechargeStation = this.getDistanceFromPosition(
+                this.getDistrict().getRechargeStationPosition());
+        this.kmsTraveled += distanceFromRechargeStation;
+        this.batteryLevel -= distanceFromRechargeStation *
                 this.taxiConfig.batteryConsumptionPerKm;
         SmartCityPosition rechargeStationPosition = this.getDistrict().getRechargeStationPosition();
         this.x = rechargeStationPosition.x;
@@ -316,7 +359,7 @@ public class Taxi implements Closeable  {
             for (NetworkTaxiConnection conn : districtTaxiConnections)
                 conn.sendMarkElectionConfirmed(rideRequest.getId(), this.id);
 
-            takenRides.add(rideRequest.getId());
+            this.takenRides.add(rideRequest.getId());
             setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
 
             if (!District.fromPosition(rideRequest.getEnd()).equals(oldDistrict))
@@ -332,8 +375,10 @@ public class Taxi implements Closeable  {
             throw new RuntimeException(e);
         }
 
-        this.batteryLevel -= (this.getDistanceFromPosition(rideRequest.getStart()) +
-                Taxi.getDistanceBetweenRideStartAndEnd(rideRequest)) * this.taxiConfig.batteryConsumptionPerKm;
+        double rideDistance = (this.getDistanceFromPosition(rideRequest.getStart()) +
+                Taxi.getDistanceBetweenRideStartAndEnd(rideRequest));
+        this.kmsTraveled += rideDistance;
+        this.batteryLevel -= rideDistance * this.taxiConfig.batteryConsumptionPerKm;
         this.x = rideRequest.getEnd().x;
         this.y = rideRequest.getEnd().y;
 
@@ -473,6 +518,8 @@ public class Taxi implements Closeable  {
                 }
             }
 
+            this.pollutionDataProvider.stopMeGently();
+            this.pollutionCollectingThread.interrupt();
             this.informOtherTaxisRechargeStationIsFree();
             this.informOtherTaxisAboutExitingFromTheNetwork();
             this.unsubscribeFromDistrictTopic();
@@ -504,6 +551,9 @@ public class Taxi implements Closeable  {
         private int batteryConsumptionPerKm = configurationManager.getBatteryConsumptionPerKm();
         private int batteryThresholdBeforeRecharge = configurationManager.getBatteryThresholdBeforeRecharge();
         private int rechargeDelay = configurationManager.getRechargeDelay();
+        private int slidingWindowBufferSize = configurationManager.getSlidingWindowBufferSize();
+        private float slidingWindowOverlappingFactor = configurationManager.getSlidingWindowOverlappingFactor();
+        private int statsLoadingDelay = configurationManager.getStatsLoadingDelay();
         private int initialBatteryLevel = 100;
 
         public TaxiConfig withRideDeliveryDelay(int rideDeliveryDelay) {
@@ -526,8 +576,23 @@ public class Taxi implements Closeable  {
             return this;
         }
 
-        public TaxiConfig withInitialBatterylevel(int initialBatteryLevel) {
+        public TaxiConfig withInitialBatteryLevel(int initialBatteryLevel) {
             this.initialBatteryLevel = initialBatteryLevel;
+            return this;
+        }
+
+        public TaxiConfig withSlidingWindowBufferSize(int slidingWindowBufferSize) {
+            this.slidingWindowBufferSize = slidingWindowBufferSize;
+            return this;
+        }
+
+        public TaxiConfig withSlidingWindowOverlappingFactor(float slidingWindowOverlappingFactor) {
+            this.slidingWindowOverlappingFactor = slidingWindowOverlappingFactor;
+            return this;
+        }
+
+        public TaxiConfig withStatsLoadingDelay(int statsLoadingDelay) {
+            this.statsLoadingDelay = statsLoadingDelay;
             return this;
         }
     }

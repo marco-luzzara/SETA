@@ -81,4 +81,14 @@ public class ConfigurationManager {
     public int getRechargeDelay() {
         return Integer.parseInt(props.getProperty("rechargeDelay"));
     }
+
+    public int getSlidingWindowBufferSize() {
+        return Integer.parseInt(props.getProperty("slidingWindowBufferSize"));
+    }
+    public float getSlidingWindowOverlappingFactor() {
+        return Float.parseFloat(props.getProperty("slidingWindowOverlappingFactor"));
+    }
+    public int getStatsLoadingDelay() {
+        return Integer.parseInt(props.getProperty("statsLoadingDelay"));
+    }
 }

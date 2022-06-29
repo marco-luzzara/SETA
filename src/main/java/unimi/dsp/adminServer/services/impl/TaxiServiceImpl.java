@@ -105,22 +105,26 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     // the whole method must be synchronized because if I add/remove a taxi while this method is
-    // executed by another thread, i could get some inconsistency (for example the id could be
-    // overwritten instead of throwing an exception in case of insert)
+    // executed by another thread, I could get some inconsistency (for example the id could be
+    // overwritten instead of throwing an exception in case of insert or the taxiInfo list is
+    // incomplete)
     @Override
-    public synchronized NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo) throws IdAlreadyRegisteredException {
-        List<TaxiInfoDto> taxiInfoDtos = this.getAllTaxis();
-        if (taxiInfoDtos.stream().anyMatch(tid -> tid.getId() == taxiInfo.getId()))
-            throw new IdAlreadyRegisteredException(taxiInfo.getId());
-        this.taxiInfos.put(taxiInfo.getId(),
-                new TaxiInfo(taxiInfo.getIpAddress(), taxiInfo.getPort()));
+    public NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo) throws IdAlreadyRegisteredException {
+        List<TaxiInfoDto> taxiInfoDtos;
+        synchronized (this) {
+            taxiInfoDtos = this.getAllTaxis();
+            if (taxiInfoDtos.stream().anyMatch(tid -> tid.getId() == taxiInfo.getId()))
+                throw new IdAlreadyRegisteredException(taxiInfo.getId());
+            this.taxiInfos.put(taxiInfo.getId(),
+                    new TaxiInfo(taxiInfo.getIpAddress(), taxiInfo.getPort()));
+        }
         SmartCityPosition newTaxiPosition = this.taxiPositionGenerator.getStartingPosition();
 
         return new NewTaxiDto(newTaxiPosition.x, newTaxiPosition.y, taxiInfoDtos);
     }
 
     @Override
-    public void removeTaxi(int id) throws IdNotFoundException {
+    public synchronized void removeTaxi(int id) throws IdNotFoundException {
         checkTaxiIdExists(id);
 
         this.taxiInfos.remove(id);

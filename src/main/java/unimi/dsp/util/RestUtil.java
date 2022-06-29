@@ -16,7 +16,7 @@ public class RestUtil {
         });
     }
 
-    public static <T> ClientResponse postRequest(Client client, String url, T entity){
+    public static <T> ClientResponse sendPostRequest(Client client, String url, T entity){
         return wrapWithExceptionHandler(() -> {
             WebResource webResource = client.resource(url);
             return webResource.type(MediaType.APPLICATION_JSON).post(ClientResponse.class, entity);

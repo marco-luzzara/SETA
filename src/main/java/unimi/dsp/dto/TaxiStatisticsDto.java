@@ -1,29 +1,33 @@
 package unimi.dsp.dto;
 
 import unimi.dsp.dto.types.SerializableOffsetDateTime;
+import unimi.dsp.util.DateTimeUtil;
 
+import javax.xml.bind.annotation.XmlAccessType;
+import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
 @XmlRootElement
+@XmlAccessorType(XmlAccessType.FIELD)
 public class TaxiStatisticsDto {
-    private SerializableOffsetDateTime ts;
+    private String ts;
     private int batteryLevel;
     private TaxiStatisticsValues statsValues;
 
     public TaxiStatisticsDto() {}
     public TaxiStatisticsDto(SerializableOffsetDateTime ts, int batteryLevel, TaxiStatisticsValues statsValues) {
-        this.ts = ts;
+        this.ts = DateTimeUtil.getStringFromOffsetDateTime(ts.getOdt());
         this.batteryLevel = batteryLevel;
         this.statsValues = statsValues;
     }
 
     public OffsetDateTime getTs() {
-        return ts.getOdt();
+        return DateTimeUtil.getOffsetDateTimeFromString(this.ts);
     }
     public void setTs(SerializableOffsetDateTime ts) {
-        this.ts = ts;
+        this.ts = DateTimeUtil.getStringFromOffsetDateTime(ts.getOdt());
     }
 
     public int getBatteryLevel() {

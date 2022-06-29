@@ -141,7 +141,7 @@ public class SetaSystem implements Closeable {
 
         @Override
         public void run() {
-            Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap.get(this.districtId);
+            final Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap.get(this.districtId);
             synchronized (newRideRequestsSet) {
                 while (true) {
                     while (newRideRequestsSet.size() == 0) {

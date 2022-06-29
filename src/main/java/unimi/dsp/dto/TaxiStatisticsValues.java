@@ -6,18 +6,18 @@ import java.util.Objects;
 
 @XmlRootElement
 public class TaxiStatisticsValues {
-    private int kmsTraveled;
+    private double kmsTraveled;
     private int numRides;
     private List<Double> pollutionAvgList = null;
 
     public TaxiStatisticsValues() {}
-    public TaxiStatisticsValues(int kmsTraveled, int numRides, List<Double> pollutionAvgList) {
+    public TaxiStatisticsValues(double kmsTraveled, int numRides, List<Double> pollutionAvgList) {
         this.kmsTraveled = kmsTraveled;
         this.numRides = numRides;
         this.pollutionAvgList = pollutionAvgList;
     }
 
-    public int getKmsTraveled() {
+    public double getKmsTraveled() {
         return kmsTraveled;
     }
     public void setKmsTraveled(int kmsTraveled) {

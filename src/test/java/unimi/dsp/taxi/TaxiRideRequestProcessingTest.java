@@ -141,11 +141,11 @@ public class TaxiRideRequestProcessingTest {
             throws InterruptedException {
         positionGeneratorMock.generate(0, 0);
         try (Taxi taxi = FakeTaxiFactory.getTaxi(1,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(60).withRideDeliveryDelay(0), adminService);
+                    new Taxi.TaxiConfig().withInitialBatteryLevel(60).withRideDeliveryDelay(0), adminService);
              Taxi taxi2 = FakeTaxiFactory.getTaxi(2,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(70).withRideDeliveryDelay(0), adminService);
+                    new Taxi.TaxiConfig().withInitialBatteryLevel(70).withRideDeliveryDelay(0), adminService);
              Taxi taxi3 = FakeTaxiFactory.getTaxi(3,
-                    new Taxi.TaxiConfig().withInitialBatterylevel(50).withRideDeliveryDelay(0), adminService)) {
+                    new Taxi.TaxiConfig().withInitialBatteryLevel(50).withRideDeliveryDelay(0), adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
             taxi3.enterInSETANetwork();
