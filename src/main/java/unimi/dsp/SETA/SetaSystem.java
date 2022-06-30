@@ -187,11 +187,6 @@ public class SetaSystem implements Closeable {
         });
     }
 
-//    private int getDistrictFromRideTopic(String topic) {
-//        String districtString = topic.split("/")[3];
-//        return Integer.parseInt(districtString.substring(8)); // start from the digit after "district"
-//    }
-
     public interface RideGenerator {
         RideRequestDto generateRide();
     }
@@ -223,7 +218,7 @@ public class SetaSystem implements Closeable {
         }
     }
 
-    public static void main(String[] args) throws MqttException, InterruptedException {
+    public static void main(String[] args) throws MqttException {
         MqttAsyncClient client = MQTTClientFactory.getClient();
         if (client.isConnected())
             System.out.println("MQTT client for SETA is ready");

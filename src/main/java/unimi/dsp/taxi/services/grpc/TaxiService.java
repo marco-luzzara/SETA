@@ -38,7 +38,9 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                         request.getX(), request.getY()
                 )));
 
-        this.taxi.getNetworkTaxiConnections().put(request.getId(), taxiConnection);
+        synchronized (this.taxi.getNetworkTaxiConnections()) {
+            this.taxi.getNetworkTaxiConnections().put(request.getId(), taxiConnection);
+        }
 
         responseObserver.onNext(
                 TaxiServiceOuterClass.TaxiAddResponse.newBuilder()
@@ -50,7 +52,9 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
     @Override
     public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest request, StreamObserver<Empty> responseObserver) {
-        this.taxi.getNetworkTaxiConnections().remove(request.getId());
+        synchronized (this.taxi.getNetworkTaxiConnections()) {
+            this.taxi.getNetworkTaxiConnections().remove(request.getId());
+        }
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
@@ -61,8 +65,11 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                                          StreamObserver<Empty> responseObserver) {
         District remoteDistrict = District.fromPosition(
                 new SmartCityPosition(request.getNewX(), request.getNewY()));
-        this.taxi.getNetworkTaxiConnections().get(request.getId())
-                .setRemoteTaxiDistrict(remoteDistrict);
+        synchronized (this.taxi.getNetworkTaxiConnections()) {
+            if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId()))
+                this.taxi.getNetworkTaxiConnections().get(request.getId())
+                        .setRemoteTaxiDistrict(remoteDistrict);
+        }
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
@@ -88,7 +95,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         RideElectionInfo.RideElectionId receivedElectionId = new RideElectionInfo.RideElectionId(
                 request.getTaxiId(), request.getDistanceFromSP(), request.getBatteryLevel());
 
-        // if the district changed message has not been processed yet, I do not want to involve
+        // if the district is different from the position of the ride request, I do not want to involve
         // other taxis in an election of another district
         boolean retry = !District.fromPosition(rideRequest.getStart()).equals(this.taxi.getDistrict());
         responseObserver.onNext(TaxiServiceOuterClass.ForwardElectionIdResponse.newBuilder()
@@ -110,13 +117,15 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
                 synchronized (this.taxi) {
                     if (this.taxi.getStatus().equals(Taxi.TaxiStatus.AVAILABLE)) {
-                        if (rideRequestsMap.containsKey(rideRequest)) {
-                            electionLogicWhenAlreadyParticipant(rideRequest, receivedElectionId, rideRequestsMap);
-                        } else {
-                            electionLogicWhenNotParticipant(rideRequest, receivedElectionId);
+                        synchronized (this.taxi.getRideRequestElectionsMap()) {
+                            if (rideRequestsMap.containsKey(rideRequest)) {
+                                electionLogicWhenAlreadyParticipant(rideRequest, receivedElectionId);
+                            } else {
+                                electionLogicWhenNotParticipant(rideRequest, receivedElectionId);
+                            }
                         }
                     } else {
-                        electionLogicWhenUnavailable(request, rideRequest, receivedElectionId);
+                        electionLogicWhenUnavailable(rideRequest, receivedElectionId);
                     }
                 }
             }
@@ -125,6 +134,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
     private void electionLogicWhenNotParticipant(RideRequestDto rideRequest,
                                                  RideElectionInfo.RideElectionId receivedElectionId) {
+        assert Thread.holdsLock(this.taxi.getRideRequestElectionsMap()) && Thread.holdsLock(this.taxi);
         // not a participant yet, forward the received request or the current election info
         // based on the greater id
         RideElectionInfo.RideElectionId thisRideElectionId = this.createElectionIdFromRideRequest(rideRequest);
@@ -136,13 +146,14 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         this.taxi.getRideRequestElectionsMap().put(rideRequest, new RideElectionInfo(
                 winningRideElectionId, RideElectionInfo.RideElectionState.ELECTION
         ));
-        this.taxi.forwardRideElectionId(rideRequest, winningRideElectionId);
+        this.taxi.forwardRideElectionIdOrTakeRide(rideRequest, winningRideElectionId);
     }
 
     private void electionLogicWhenAlreadyParticipant(RideRequestDto rideRequest,
-                                                     RideElectionInfo.RideElectionId receivedElectionId,
-                                                     Map<RideRequestDto, RideElectionInfo> rideRequestsMap) {
-        RideElectionInfo rideElectionInfo = rideRequestsMap.get(rideRequest);
+                                                     RideElectionInfo.RideElectionId receivedElectionId) {
+        assert Thread.holdsLock(this.taxi.getRideRequestElectionsMap()) && Thread.holdsLock(this.taxi);
+
+        RideElectionInfo rideElectionInfo = this.taxi.getRideRequestElectionsMap().get(rideRequest);
         // forward if the election info id is greater
         if (receivedElectionId.isGreaterThan(rideElectionInfo.getRideElectionId())) {
             rideElectionInfo.setRideElectionId(receivedElectionId);
@@ -167,15 +178,10 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                 this.taxi.getBatteryLevel());
     }
 
-    private void electionLogicWhenUnavailable(TaxiServiceOuterClass.RideElectionIdRequest request,
-                                              RideRequestDto rideRequest,
+    private void electionLogicWhenUnavailable(RideRequestDto rideRequest,
                                               RideElectionInfo.RideElectionId receivedElectionId) {
-        // I can forward the request only if the taxi id that started it is present in my
-        // taxi network connections and it is not myself the owner of the ride request
-//        if (this.taxi.getNetworkTaxiConnections().containsKey(request.getTaxiId()) &&
-//                request.getTaxiId() != this.taxi.getId()) {
+        // when unavailable, I just forward the request to the next taxi
         this.taxi.forwardRideElectionId(rideRequest, receivedElectionId);
-//        }
     }
 
     @Override
@@ -213,41 +219,46 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     @Override
     public void askRechargeRequestApproval(TaxiServiceOuterClass.RechargeInfoRequest request,
                                            StreamObserver<TaxiServiceOuterClass.RechargeInfoResponse> responseObserver) {
-        Taxi.TaxiStatus status = this.taxi.getStatus();
-        if (status.equals(Taxi.TaxiStatus.RECHARGING)) {
+        synchronized (this.taxi) {
+            Taxi.TaxiStatus status = this.taxi.getStatus();
+            if (status.equals(Taxi.TaxiStatus.RECHARGING)) {
+                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                        .setOk(false).build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+            if (status.equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
+                long rechargeTs = this.taxi.getLocalRechargeRequestTs();
+                // if the ts are equal, the smaller taxi id wins, otherwise the winner is the
+                // request with the lower ts
+                boolean isRequestConfirmed = request.getRechargeTs() == rechargeTs ?
+                        this.taxi.getId() > request.getTaxiId() :
+                        rechargeTs > request.getRechargeTs();
+
+                responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
+                        .setOk(isRequestConfirmed).build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+
+            // if not recharging or waiting to recharge it is not interested and sends back true
             responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                    .setOk(false).build());
+                    .setOk(true).build());
             responseObserver.onCompleted();
-            return;
         }
-
-        if (status.equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
-            long rechargeTs = this.taxi.getLocalRechargeRequestTs();
-            // if the ts are equal, the smaller taxi id wins, otherwise the winner is the
-            // request with the lower ts
-            boolean isRequestConfirmed = request.getRechargeTs() == rechargeTs ?
-                    this.taxi.getId() > request.getTaxiId() :
-                    rechargeTs > request.getRechargeTs();
-
-            responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                    .setOk(isRequestConfirmed).build());
-            responseObserver.onCompleted();
-            return;
-        }
-
-        // if not recharging or waiting to recharge it is not interested and sends back true
-        responseObserver.onNext(TaxiServiceOuterClass.RechargeInfoResponse.newBuilder()
-                .setOk(true).build());
-        responseObserver.onCompleted();
     }
 
     @Override
     public void updateRechargeRequestApproval(TaxiServiceOuterClass.RechargeApprovalRequest request,
                                               StreamObserver<Empty> responseObserver) {
-        if (!this.taxi.getStatus().equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
-            responseObserver.onNext(Empty.getDefaultInstance());
-            responseObserver.onCompleted();
-            return;
+        synchronized (this.taxi) {
+            if (!this.taxi.getStatus().equals(Taxi.TaxiStatus.WAITING_TO_RECHARGE)) {
+                responseObserver.onNext(Empty.getDefaultInstance());
+                responseObserver.onCompleted();
+                return;
+            }
         }
 
         synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
@@ -259,77 +270,4 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
         this.taxi.accessTheRechargeStationIfPossible();
     }
-
-    //    @Override
-//    public void askRideRequestApproval(TaxiServiceOuterClass.ElectionInfoRequest request,
-//                                       StreamObserver<TaxiServiceOuterClass.RideRequestApprovalResponse> responseObserver) {
-//        if (request.getRideRequestTimestamp() < taxi.getSubscriptionTs() ||
-//                !this.taxi.getStatus().equals(Taxi.TaxiStatus.AVAILABLE)) {
-//            responseObserver.onNext(TaxiServiceOuterClass.RideRequestApprovalResponse
-//                    .newBuilder().setIsApproved(true).build());
-//            responseObserver.onCompleted();
-//            return;
-//        }
-//
-//        RideRequestDto rideRequest = null;
-//        Map<RideRequestDto, Map<Integer, Boolean>> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-//        // before responding I wait until I receive the published ride request too
-//        synchronized (rideRequestsMap) {
-//            while (rideRequestsMap.keySet()
-//                    .stream().noneMatch(rr -> rr.getId() == request.getRideRequestId())) {
-//                try {
-//                    rideRequestsMap.wait();
-//                } catch (InterruptedException e) {
-//                    throw new RuntimeException(e);
-//                }
-//            }
-//
-//            rideRequest = taxi.getRideRequestElectionsMap().keySet()
-//                    .stream().filter(rr -> rr.getId() == request.getRideRequestId())
-//                    .findAny().get();
-//        }
-//
-//        responseObserver.onNext(TaxiServiceOuterClass.RideRequestApprovalResponse
-//                .newBuilder()
-//                .setIsApproved(isTheRemoteTaxiBetterSuitedForTheRide(rideRequest, request))
-//                .build());
-//        responseObserver.onCompleted();
-//    }
-//
-//    @Override
-//    public void updateRideRequestApproval(TaxiServiceOuterClass.RideRequestUpdateRequest request,
-//                                          StreamObserver<Empty> responseObserver) {
-//        Map<RideRequestDto, Map<Integer, Boolean>> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-//        // I have to synchronize on the whole map because in the meantime the ride id key could be deleted
-//        synchronized (rideRequestsMap) {
-//            Optional<RideRequestDto> optRideRequest = rideRequestsMap.keySet()
-//                    .stream().filter(rr -> rr.getId() == request.getRideRequestId())
-//                    .findAny();
-//
-//            optRideRequest.ifPresent(rr -> {
-//                if (request.getIsAlreadyConfirmed())
-//                    rideRequestsMap.remove(rr);
-//                else {
-//                    rideRequestsMap.get(rr).put(request.getTaxiId(), true);
-//                    this.taxi.takeRideIfPossible(rr);
-//                }
-//            });
-//        }
-//    }
-
-//    private boolean isTheRemoteTaxiBetterSuitedForTheRide(
-//            RideRequestDto rideRequest,
-//            TaxiServiceOuterClass.ElectionInfoRequest remoteElectionInfo) {
-//        if (remoteElectionInfo.getDistanceFromSP() < this.taxi.getDistanceFromRideStart(rideRequest))
-//            return true;
-//        else if (remoteElectionInfo.getDistanceFromSP() > this.taxi.getDistanceFromRideStart(rideRequest))
-//            return false;
-//
-//        if (remoteElectionInfo.getBatteryLevel() > this.taxi.getBatteryLevel())
-//            return true;
-//        else if (remoteElectionInfo.getBatteryLevel() < this.taxi.getBatteryLevel())
-//            return false;
-//
-//        return remoteElectionInfo.getTaxiId() > this.taxi.getId();
-//    }
 }

@@ -13,6 +13,7 @@ import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 public class NetworkTaxiConnection {
     private static final Logger logger = LogManager.getLogger(NetworkTaxiConnection.class.getName());
@@ -52,7 +53,13 @@ public class NetworkTaxiConnection {
     }
 
     private void closeChannelIfNecessary() {
-        this.channel.ifPresent(ManagedChannel::shutdown);
+        this.channel.ifPresent(c -> {
+            try {
+                c.shutdown().awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        });
         this.channel = Optional.empty();
     }
 

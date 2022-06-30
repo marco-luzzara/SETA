@@ -43,8 +43,10 @@ public class Taxi implements Closeable  {
     private final int port;
     private final TaxiConfig taxiConfig;
     private volatile int batteryLevel;
-    private int x;
-    private int y;
+    // x and y are volatile because they are never updated at the same time by different threads
+    // but they could be read by different threads
+    private volatile int x;
+    private volatile int y;
     // map that associate a taxi id with a connection to the corresponding taxi in the network
     private Map<Integer, NetworkTaxiConnection> networkTaxis;
     private TaxiStatus status;
@@ -439,10 +441,12 @@ public class Taxi implements Closeable  {
         logger.info("Taxi {} subscribed to district topic {}", Taxi.this.id, Taxi.this.getDistrict());
     }
 
-    public synchronized void forwardRideElectionIdOrTakeRide(RideRequestDto rideRequest,
+    public void forwardRideElectionIdOrTakeRide(RideRequestDto rideRequest,
                                                 RideElectionInfo.RideElectionId rideElectionId) {
         boolean retry;
         do {
+            if (!District.fromPosition(rideRequest.getStart()).equals(this.getDistrict()))
+                return;
             Optional<NetworkTaxiConnection> optNextTaxiInRing = this.getNextDistrictTaxiConnection();
             if (optNextTaxiInRing.isPresent())
                 retry = optNextTaxiInRing.get().sendForwardElectionIdOrTakeRide(rideRequest,
@@ -458,6 +462,8 @@ public class Taxi implements Closeable  {
                                       RideElectionInfo.RideElectionId rideElectionId) {
         boolean retry;
         do {
+            if (!District.fromPosition(rideRequest.getStart()).equals(this.getDistrict()))
+                return;
             Optional<NetworkTaxiConnection> optNextTaxiInRing = this.getNextDistrictTaxiConnection();
             retry = optNextTaxiInRing.map(networkTaxiConnection -> networkTaxiConnection
                     .sendForwardElectionIdOrTakeRide(rideRequest,
@@ -486,7 +492,11 @@ public class Taxi implements Closeable  {
     }
 
     private void stopGRPCServer() {
-        this.grpcServer.shutdown();
+        try {
+            this.grpcServer.shutdown().awaitTermination();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         logger.info("Taxi {} stopped its grpc server", this.id);
     }
 
