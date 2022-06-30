@@ -203,7 +203,7 @@ public class TaxiRideRequestProcessingTest {
             Thread.sleep(500);
 
             assertThat(this.confirmedRides).contains(0);
-            assertThat(taxi.getDistrict()).isEqualTo(District.BOTTOM_LEFT);
+            assertThat(taxi.getDistrict()).isEqualTo(District.TOP_RIGHT);
             assertThat(taxi.getStatus()).isEqualTo(Taxi.TaxiStatus.AVAILABLE);
         }
     }

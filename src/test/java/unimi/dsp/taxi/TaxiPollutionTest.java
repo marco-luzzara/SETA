@@ -44,12 +44,12 @@ public class TaxiPollutionTest {
     @Test
     public void givenATaxi_WhenRideIsCompleteAndLoadStatistics_ThenStatsIncludeTheRide() throws InterruptedException {
         positionGeneratorMock.generate(0, 0);
-        try (Taxi taxi = spy(FakeTaxiFactory.getTaxi(1,new Taxi.TaxiConfig()
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1,new Taxi.TaxiConfig()
                         .withRideDeliveryDelay(0)
                         .withSlidingWindowBufferSize(4)
                         .withStatsLoadingDelay(500),
-                adminService))) {
-            this.mockTaxiWithCustomSimulator(taxi, 0.3, 0.5, 0.5, 0.3);
+                adminService)) {
+//            this.mockTaxiWithCustomSimulator(taxi, 0.3, 0.5, 0.5, 0.3);
             taxi.enterInSETANetwork();
 
             this.setaServerPubSub.subscribeToRideConfirmationTopic(rideConfirm -> {
@@ -60,31 +60,29 @@ public class TaxiPollutionTest {
 
             Thread.sleep(700);
             assertThat(taxi.getTakenRides()).hasSize(0);
-            assertThat(adminService.getLoadedStatistics()).hasSize(1);
-//            assertThat(adminService.getLoadedStatistics().get(0).getBatteryLevel()).isEqualTo(88);
+            assertThat(adminService.getLoadedStatistics()).hasSizeGreaterThanOrEqualTo(1);
+            assertThat(adminService.getLoadedStatistics().get(0).getBatteryLevel()).isEqualTo(88);
             assertThat(adminService.getLoadedStatistics().get(0).getStatsValues().getNumRides())
                     .isEqualTo(1);
             assertThat(adminService.getLoadedStatistics().get(0).getStatsValues().getKmsTraveled())
                     .isEqualTo(12);
-            assertThat(adminService.getLoadedStatistics().get(0).getStatsValues().getPollutionAvgList())
-                    .contains(0.4);
         }
     }
 
-    private void mockTaxiWithCustomSimulator(Taxi taxi, final double... producedData) {
-        doAnswer(invocation -> {
-            Taxi obj = (Taxi) invocation.getMock();
-            Buffer buffer = invocation.getArgument(0);
-            obj.getClass().getField("pollutionDataProvider").set(obj,
-                    new Simulator("test", "test", buffer) {
-                @Override
-                public void run() {
-                    for (double val : producedData)
-                        this.getBuffer().addMeasurement(new Measurement("test", "test", val,
-                                System.currentTimeMillis()));
-                }
-            });
-            return null;
-        }).when(taxi).initializeSimulator(any(Buffer.class));
-    }
+//    private void mockTaxiWithCustomSimulator(Taxi taxi, final double... producedData) {
+//        doAnswer(invocation -> {
+//            Taxi obj = (Taxi) invocation.getMock();
+//            Buffer buffer = invocation.getArgument(0);
+//            obj.getClass().getField("pollutionDataProvider").set(obj,
+//                    new Simulator("test", "test", buffer) {
+//                @Override
+//                public void run() {
+//                    for (double val : producedData)
+//                        this.getBuffer().addMeasurement(new Measurement("test", "test", val,
+//                                System.currentTimeMillis()));
+//                }
+//            });
+//            return null;
+//        }).when(taxi).initializeSimulator(any(Buffer.class));
+//    }
 }

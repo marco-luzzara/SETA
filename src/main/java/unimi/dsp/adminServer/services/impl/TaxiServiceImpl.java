@@ -24,8 +24,10 @@ public class TaxiServiceImpl implements TaxiService {
         this.taxiPositionGenerator = taxiPositionGenerator;
     }
 
+    // I have to synchronize both read and write methods because iterators
+    // are not concurrently modifiable and would throw a ConcurrentModification exception
     @Override
-    public List<TaxiInfoDto> getAllTaxis() {
+    public synchronized List<TaxiInfoDto> getAllTaxis() {
         return taxiInfos.entrySet().stream().map(e ->
                 new TaxiInfoDto(
                         e.getKey(),
@@ -46,16 +48,12 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     private TaxiStatisticsAvgReportDto getTaxiStatisticsAvgReport(int id, int n) {
-        // reverse iterator to stream
-        // https://mkyong.com/java8/java-8-how-to-convert-iterator-to-stream/
-        Iterator<TaxiStatisticsDto> reverseIt = this.taxiInfos.get(id).taxiStatisticsList.descendingIterator();
-        List<TaxiStatisticsDto> statsList = StreamSupport.stream(
-                Spliterators.spliteratorUnknownSize(
-                        reverseIt,
-                        Spliterator.ORDERED),
-                 false)
-            .limit(n)
-            .collect(Collectors.toList());
+        List<TaxiStatisticsDto> statsList;
+        synchronized (this) {
+            statsList = this.taxiInfos.get(id).taxiStatisticsList.stream()
+                    .limit(n)
+                    .collect(Collectors.toList());
+        }
 
         return createAvgReportFromListOfStatistics(statsList);
     }
@@ -74,10 +72,13 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     private TaxiStatisticsAvgReportDto getTaxisStatisticsAvgReport(OffsetDateTime tsStart, OffsetDateTime tsEnd) {
-        List<TaxiStatisticsDto> statsList = this.taxiInfos.values().stream()
-                .flatMap(ti -> ti.getTaxiStatisticsList().stream())
-                .filter(tsDto -> !tsDto.getTs().isBefore(tsStart) && !tsDto.getTs().isAfter(tsEnd))
-                .collect(Collectors.toList());
+        List<TaxiStatisticsDto> statsList;
+        synchronized (this) {
+             statsList = this.taxiInfos.values().stream()
+                    .flatMap(ti -> ti.getTaxiStatisticsList().stream())
+                    .filter(tsDto -> !tsDto.getTs().isBefore(tsStart) && !tsDto.getTs().isAfter(tsEnd))
+                    .collect(Collectors.toList());
+        }
 
         return createAvgReportFromListOfStatistics(statsList);
     }
@@ -97,17 +98,14 @@ public class TaxiServiceImpl implements TaxiService {
     }
 
     @Override
-    public void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics) throws IdNotFoundException {
+    public synchronized void loadTaxiStatistics(int id, TaxiStatisticsDto taxiStatistics) throws IdNotFoundException {
         checkTaxiIdExists(id);
 
         TaxiInfo taxiInfo = this.taxiInfos.get(id);
         taxiInfo.addTaxiStatistics(taxiStatistics);
     }
 
-    // the whole method must be synchronized because if I add/remove a taxi while this method is
-    // executed by another thread, I could get some inconsistency (for example the id could be
-    // overwritten instead of throwing an exception in case of insert or the taxiInfo list is
-    // incomplete)
+    // getAllTaxis must be synchronized because otherwise I risk to miss one taxi in the taxi info list
     @Override
     public NewTaxiDto registerTaxi(TaxiInfoDto taxiInfo) throws IdAlreadyRegisteredException {
         List<TaxiInfoDto> taxiInfoDtos;
@@ -156,7 +154,7 @@ public class TaxiServiceImpl implements TaxiService {
         }
 
         public void addTaxiStatistics(TaxiStatisticsDto taxiStatistics) {
-            this.taxiStatisticsList.add(taxiStatistics);
+            this.taxiStatisticsList.addFirst(taxiStatistics);
         }
     }
 }
