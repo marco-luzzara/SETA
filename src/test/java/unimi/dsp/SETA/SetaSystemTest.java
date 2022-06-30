@@ -51,7 +51,10 @@ public class SetaSystemTest {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 2000, setaServerPubSub)) {
+                    new SetaSystem.SETAConfig().withRequestLimit(1)
+                            .withGenFrequencyMillis(1)
+                            .withNumGeneratedRequest(1)
+                            .withRideRequestTimeout(2000), setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -78,7 +81,10 @@ public class SetaSystemTest {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 1500, setaServerPubSub)) {
+                    new SetaSystem.SETAConfig().withRequestLimit(1)
+                            .withGenFrequencyMillis(1)
+                            .withNumGeneratedRequest(1)
+                            .withRideRequestTimeout(1500), setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -107,7 +113,10 @@ public class SetaSystemTest {
         runWithinClient(client -> {
             try (SetaSystem ss = new SetaSystem(
                     RidePositionGeneratorFactory.getGenerator(0, 0, 1, 1),
-                    1, 1, 1, 1500, setaServerPubSub)) {
+                    new SetaSystem.SETAConfig().withRequestLimit(1)
+                            .withGenFrequencyMillis(1)
+                            .withNumGeneratedRequest(1)
+                            .withRideRequestTimeout(1500), setaServerPubSub)) {
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);
@@ -140,7 +149,10 @@ public class SetaSystemTest {
                     RidePositionGeneratorFactory.getGenerator(
                             RidePositionGeneratorFactory.getRideRequest(0, 0, 0, 0, 1),
                             RidePositionGeneratorFactory.getRideRequest(1, 1, 2, 3, 4)),
-                    2, 10, 1, 2000, setaServerPubSub)){
+                    new SetaSystem.SETAConfig().withRequestLimit(2)
+                            .withGenFrequencyMillis(10)
+                            .withNumGeneratedRequest(1)
+                            .withRideRequestTimeout(2000), setaServerPubSub)){
                 client.setCallback(getCallbackForMessageArrived((topic, message, counter) -> {
                     RideRequestDto rideRequest = SerializationUtil.deserialize(
                             message.getPayload(), RideRequestDto.class);

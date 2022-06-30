@@ -2,31 +2,24 @@ package unimi.dsp.SETA;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import unimi.dsp.SETA.services.SETAServerPubSub;
-import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 import unimi.dsp.util.ConfigurationManager;
 import unimi.dsp.util.MQTTClientFactory;
-import unimi.dsp.util.SerializationUtil;
 
 import java.io.Closeable;
 import java.util.*;
 
 public class SetaSystem implements Closeable {
     private static final ConfigurationManager configurationManager = ConfigurationManager.getInstance();
-    private static final String RIDE_REQUEST_TOPIC_PREFIX = configurationManager.getRideRequestTopicPrefix();
-    private static final String RIDE_CONFIRM_TOPIC = configurationManager.getRideConfirmationTopic();
     private static final Logger logger = LogManager.getLogger(SetaSystem.class.getName());
 
     private final RideGenerator rideGenerator;
-    private final int requestLimit;
-    private final int genFrequencyMillis;
-    private final int numGeneratedRequest;
-    private final int rideRequestTimeout;
-    private int curId;
+    private final SETAConfig setaConfig;
     private final SETAServerPubSubBase setaServerPubSub;
     private final Map<Integer, Set<RideRequestDto>> districtNewRequestsMap;
     private final Set<Integer> pendingRideConfirmations;
@@ -35,24 +28,15 @@ public class SetaSystem implements Closeable {
     /**
      * Create a SETA system
      * @param rideGenerator generates the starting and destination position for a ride
-     * @param requestLimit specifies the number of requests the SETA system is going to send before exiting.
-     *                     if 0, the SETA never stops (unless forced manually).
-     * @param genFrequencyMillis number of milliseconds it waits before publishing new rides
-     * @param numGeneratedRequest number of requests published before sleeping again
+     * @param setaConfig configuration properties for seta
+     * @param setaServerPubSub pubsub implementation
      */
     public SetaSystem(RideGenerator rideGenerator,
-                      int requestLimit,
-                      int genFrequencyMillis,
-                      int numGeneratedRequest,
-                      int rideRequestTimeout,
+                      SETAConfig setaConfig,
                       SETAServerPubSubBase setaServerPubSub) {
         this.rideGenerator = rideGenerator;
-        this.requestLimit = requestLimit;
-        this.genFrequencyMillis = genFrequencyMillis;
-        this.numGeneratedRequest = numGeneratedRequest;
-        this.rideRequestTimeout = rideRequestTimeout;
+        this.setaConfig = setaConfig;
         this.setaServerPubSub = setaServerPubSub;
-        this.curId = 0;
 
         this.districtNewRequestsMap = new HashMap<>();
         this.pendingRideConfirmations = new HashSet<>();
@@ -61,21 +45,27 @@ public class SetaSystem implements Closeable {
         }
     }
 
-    public void run() throws MqttException, InterruptedException {
+    public void run() throws MqttException {
         this.subscribeToRideConfirmations();
         this.startThreadsToPublishRideRequests();
+        int curId = 0;
 
-        while (requestLimit == 0 || curId < requestLimit) {
-            for (int i = 0; i < numGeneratedRequest; i++) {
-                RideRequestDto rideRequest = this.rideGenerator.generateRide();
-                addToNewRideRequests(rideRequest);
-                this.curId++;
+        try {
+            while (!Thread.currentThread().isInterrupted() &&
+                    (this.setaConfig.requestLimit == 0 || curId < this.setaConfig.requestLimit)) {
+                for (int i = 0; i < this.setaConfig.numGeneratedRequest; i++) {
+                    RideRequestDto rideRequest = this.rideGenerator.generateRide();
+                    addToNewRideRequests(rideRequest);
+                    curId++;
 
-                if (curId == requestLimit)
-                    return;
+                    if (curId == this.setaConfig.requestLimit)
+                        return;
+                }
+
+                Thread.sleep(this.setaConfig.genFrequencyMillis);
             }
-
-            Thread.sleep(this.genFrequencyMillis);
+        }
+        catch (InterruptedException e) {
         }
     }
 
@@ -100,16 +90,16 @@ public class SetaSystem implements Closeable {
         @Override
         public void run() {
             try {
-                setaServerPubSub.publishRideRequest(this.rideRequest);
+                SetaSystem.this.setaServerPubSub.publishRideRequest(this.rideRequest);
 
-                synchronized (pendingRideConfirmations) {
-                    pendingRideConfirmations.add(this.rideRequest.getId());
+                synchronized (SetaSystem.this.pendingRideConfirmations) {
+                    SetaSystem.this.pendingRideConfirmations.add(this.rideRequest.getId());
                 }
 
-                Thread.sleep(rideRequestTimeout);
+                Thread.sleep(setaConfig.rideRequestTimeout);
 
-                synchronized (pendingRideConfirmations) {
-                    if (pendingRideConfirmations.contains(this.rideRequest.getId())) {
+                synchronized (SetaSystem.this.pendingRideConfirmations) {
+                    if (SetaSystem.this.pendingRideConfirmations.contains(this.rideRequest.getId())) {
                         logger.info("Ride request with Id {} will be sent again (cause: idleness)",
                                 this.rideRequest.getId());
                         this.rideRequest.resetTimestamp();
@@ -122,11 +112,9 @@ public class SetaSystem implements Closeable {
                 }
 
                 synchronized (workingThreads) {
-                    workingThreads.add(this);
+                    workingThreads.remove(this);
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
-                throw new RuntimeException(e);
             }
         }
     }
@@ -141,30 +129,30 @@ public class SetaSystem implements Closeable {
 
         @Override
         public void run() {
-            final Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap.get(this.districtId);
-            synchronized (newRideRequestsSet) {
-                while (true) {
-                    while (newRideRequestsSet.size() == 0) {
-                        try {
+            Set<RideRequestDto> newRideRequestsSet = districtNewRequestsMap.get(this.districtId);
+            try {
+                synchronized (newRideRequestsSet) {
+                    while (!this.isInterrupted()) {
+                        while (newRideRequestsSet.size() == 0) {
                             newRideRequestsSet.wait();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
                         }
-                    }
 
-                    for (RideRequestDto rideRequest : newRideRequestsSet) {
-                        RideRequestPublisher rideRequestPublisher = new RideRequestPublisher(
-                                this.districtId, rideRequest);
-                        // I do not need to synchronized on `newRideRequestsSet` again because already in
-                        // the synchronized block
-                        // TODO: maybe this remove should be put in the thread body
-                        newRideRequestsSet.remove(rideRequest);
-                        rideRequestPublisher.start();
-                        synchronized (workingThreads) {
-                            workingThreads.add(rideRequestPublisher);
+                        List<RideRequestDto> publishedRequests = new ArrayList<>();
+                        for (RideRequestDto rideRequest : newRideRequestsSet) {
+                            RideRequestPublisher rideRequestPublisher = new RideRequestPublisher(
+                                    this.districtId, rideRequest);
+
+                            rideRequestPublisher.start();
+                            publishedRequests.add(rideRequest);
+                            synchronized (workingThreads) {
+                                workingThreads.add(rideRequestPublisher);
+                            }
                         }
+                        publishedRequests.forEach(newRideRequestsSet::remove);
                     }
                 }
+            }
+            catch (InterruptedException e) {
             }
         }
     }
@@ -204,13 +192,42 @@ public class SetaSystem implements Closeable {
 //        return Integer.parseInt(districtString.substring(8)); // start from the digit after "district"
 //    }
 
+    public interface RideGenerator {
+        RideRequestDto generateRide();
+    }
+
+    public static class SETAConfig {
+        private int requestLimit = 0;
+        private int genFrequencyMillis = configurationManager.getSETAGenerationFrequencyMillis();
+        private int numGeneratedRequest = configurationManager.getSETANumGeneratedRequest();
+        private int rideRequestTimeout = configurationManager.getRideRequestTimeout();
+
+        public SETAConfig withRequestLimit(int requestLimit) {
+            this.requestLimit = requestLimit;
+            return this;
+        }
+
+        public SETAConfig withGenFrequencyMillis(int genFrequencyMillis) {
+            this.genFrequencyMillis = genFrequencyMillis;
+            return this;
+        }
+
+        public SETAConfig withNumGeneratedRequest(int numGeneratedRequest) {
+            this.numGeneratedRequest = numGeneratedRequest;
+            return this;
+        }
+
+        public SETAConfig withRideRequestTimeout(int rideRequestTimeout) {
+            this.rideRequestTimeout = rideRequestTimeout;
+            return this;
+        }
+    }
+
     public static void main(String[] args) throws MqttException, InterruptedException {
         MqttAsyncClient client = MQTTClientFactory.getClient();
         if (client.isConnected())
             System.out.println("MQTT client for SETA is ready");
-        int generationFrequencyMillis = configurationManager.getSETAGenerationFrequencyMillis();
-        int numGeneratedRequest = configurationManager.getSETANumGeneratedRequest();
-        int rideRequestTimeout = configurationManager.getRideRequestTimeout();
+        SETAConfig setaConfig = new SETAConfig();
         SETAServerPubSubBase setaServerPubSub = new SETAServerPubSub(client);
 
         RideGenerator rideGenerator = new RideGenerator() {
@@ -226,11 +243,11 @@ public class SetaSystem implements Closeable {
                     start = new SmartCityPosition(
                             random.nextInt(smartCityWidth),
                             random.nextInt(smartCityHeight)
-                        );
+                    );
                     end = new SmartCityPosition(
                             random.nextInt(smartCityWidth),
                             random.nextInt(smartCityHeight)
-                        );
+                    );
                 } while (start.equals(end));
 
                 this.id++;
@@ -239,17 +256,12 @@ public class SetaSystem implements Closeable {
             }
         };
 
-        try (SetaSystem ss = new SetaSystem(rideGenerator, 0,
-                generationFrequencyMillis, numGeneratedRequest, rideRequestTimeout, setaServerPubSub)) {
+        try (SetaSystem ss = new SetaSystem(rideGenerator, setaConfig, setaServerPubSub)) {
             ss.run();
         }
         finally {
             client.disconnect().waitForCompletion();
             client.close();
         }
-    }
-
-    public interface RideGenerator {
-        RideRequestDto generateRide();
     }
 }

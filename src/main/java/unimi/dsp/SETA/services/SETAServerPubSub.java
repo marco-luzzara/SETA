@@ -4,12 +4,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.paho.client.mqttv3.*;
 import unimi.dsp.SETA.SETAServerPubSubBase;
-import unimi.dsp.SETA.SetaSystem;
 import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.District;
 import unimi.dsp.util.ConfigurationManager;
-import unimi.dsp.util.MQTTClientFactory;
 import unimi.dsp.util.SerializationUtil;
 
 import java.util.function.Consumer;

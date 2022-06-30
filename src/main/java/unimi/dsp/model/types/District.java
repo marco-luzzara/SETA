@@ -2,8 +2,6 @@ package unimi.dsp.model.types;
 
 import unimi.dsp.util.ConfigurationManager;
 
-import java.util.Arrays;
-
 public enum District {
     TOP_LEFT(1, new SmartCityPosition(0, 0)),
     TOP_RIGHT(2, new SmartCityPosition(9, 0)),

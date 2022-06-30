@@ -7,7 +7,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
-import unimi.dsp.model.RechargeRequest;
 import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
@@ -17,7 +16,6 @@ import unimi.dsp.taxi.TaxiServiceGrpc;
 import unimi.dsp.taxi.TaxiServiceOuterClass;
 
 import java.util.Map;
-import java.util.Optional;
 
 public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     private static final Logger logger = LogManager.getLogger(TaxiService.class.getName());
