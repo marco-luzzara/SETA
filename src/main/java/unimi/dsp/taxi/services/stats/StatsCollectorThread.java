@@ -20,11 +20,10 @@ public class StatsCollectorThread extends Thread {
 
     private final Buffer buffer;
     private final int statsLoadingDelay;
-    private Thread pollutionDataAggregator;
+    private final Thread pollutionDataAggregator;
     private final List<Double> pollutionAverages = new ArrayList<>();
     private final Taxi taxi;
     private final AdminServiceBase adminService;
-    private volatile Object gentlyStop = new Object();
 
     public StatsCollectorThread(Buffer buffer,
                                 int statsLoadingDelay,
@@ -53,7 +52,6 @@ public class StatsCollectorThread extends Thread {
 
         try {
             while (!this.isInterrupted()) {
-                // TODO: interrupt arrives here and we still have to wait for
                 Thread.sleep(statsLoadingDelay);
                 logger.info("sending statistics to the server for taxi {}", this.taxi.getId());
                 this.sendStatisticsToAdminServer();

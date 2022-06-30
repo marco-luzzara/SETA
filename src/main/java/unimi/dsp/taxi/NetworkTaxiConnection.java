@@ -33,6 +33,10 @@ public class NetworkTaxiConnection {
         return remoteTaxiDistrict;
     }
 
+    public int getRemoteTaxiId() {
+        return remoteTaxiInfo.getId();
+    }
+
     public void setRemoteTaxiDistrict(District remoteTaxiDistrict) {
         this.remoteTaxiDistrict = remoteTaxiDistrict;
         this.openChannelBasedOnDistrict();
@@ -64,7 +68,7 @@ public class NetworkTaxiConnection {
     }
 
     /**
-     * used to inform the remote taxi that a new one (`taxi`) has entered in the network.
+     * used to inform the remote taxi that a new one (`taxi`) has entered the network.
      * the channel stays open only for those taxis that are in the same district.
      */
     public void sendAddTaxi() {
@@ -96,7 +100,7 @@ public class NetworkTaxiConnection {
                 .setNewX(this.taxi.getX()).setNewY(this.taxi.getY())
                 .build();
 
-        TaxiServiceGrpc.newBlockingStub(channel.get()).changeRemoteTaxiDistrict(request);
+        TaxiServiceGrpc.newBlockingStub(this.channel.get()).changeRemoteTaxiDistrict(request);
         this.openChannelBasedOnDistrict();
     }
 
@@ -155,7 +159,7 @@ public class NetworkTaxiConnection {
             @Override
             public void onError(Throwable t) {
                 logger.error(
-                        String.format("ERROR: taxi %d is sending ELECTED info for ride %d to taxi %d",
+                        String.format("ERROR: taxi %d cannot send ELECTED info for ride %d to taxi %d",
                                 taxi.getId(), rideRequestId, remoteTaxiInfo.getId()), t);
             }
 
@@ -165,7 +169,7 @@ public class NetworkTaxiConnection {
         });
     }
 
-    public void sendAskRechargeRequestApproval() {
+    public boolean sendAskRechargeRequestApproval() {
         assert this.channel.isPresent();
 
         TaxiServiceOuterClass.RechargeInfoRequest request = TaxiServiceOuterClass.RechargeInfoRequest
@@ -175,10 +179,7 @@ public class NetworkTaxiConnection {
         TaxiServiceOuterClass.RechargeInfoResponse response = TaxiServiceGrpc.newBlockingStub(this.channel.get())
                 .askRechargeRequestApproval(request);
 
-        synchronized (this.taxi.getRechargeAwaitingTaxiIds()) {
-            if (!response.getOk())
-                this.taxi.getRechargeAwaitingTaxiIds().add(this.remoteTaxiInfo.getId());
-        }
+        return response.getOk();
     }
 
     public void sendUpdateRechargeRequestApproval() {
@@ -207,74 +208,4 @@ public class NetworkTaxiConnection {
                     }
                 });
     }
-
-//    public void sendAskRideRequestApproval(RideRequestDto rideRequest) {
-//        // I am sending a ride request approval from my district
-//        assert this.channel.isPresent();
-//
-//        TaxiServiceOuterClass.ElectionInfoRequest request = TaxiServiceOuterClass.ElectionInfoRequest.newBuilder()
-//                .setRideRequestId(rideRequest.getId())
-//                .setTaxiId(this.taxi.getId())
-//                .setDistanceFromSP(this.taxi.getDistanceFromRideStart(rideRequest))
-//                .setBatteryLevel(this.taxi.getBatteryLevel())
-//                .setRideRequestTimestamp(rideRequest.getTimestamp())
-//                .build();
-//        // TODO: a Blocking stub is probably better, to avoid some concurrency problems, you could wrap each of
-//        // these executions in a thread and then join eventually
-//        TaxiServiceGrpc.newStub(this.channel.get()).askRideRequestApproval(request,
-//                new StreamObserver<TaxiServiceOuterClass.RideRequestApprovalResponse>() {
-//                    @Override
-//                    public void onNext(TaxiServiceOuterClass.RideRequestApprovalResponse value) {
-//                        Map<RideRequestDto, Map<Integer, Boolean>> rideRequestsMap = taxi.getRideRequestElectionsMap();
-//                        // I have to synchronize on the whole map because in the meantime the taxi could exit
-//                        // and the ride request key might be removed
-//                        synchronized (rideRequestsMap) {
-//                            Optional<RideRequestDto> optRideRequest = rideRequestsMap.keySet()
-//                                    .stream().filter(rr -> rr.getId() == request.getRideRequestId())
-//                                    .findAny();
-//
-//                            optRideRequest.ifPresent(rr -> {
-//                                rideRequestsMap.get(rr).put(remoteTaxiInfo.getId(), value.getIsApproved());
-//                                if (value.getIsApproved())
-//                                    taxi.takeRideIfPossible(rr);
-//                            });
-//                        }
-//                    }
-//
-//                    @Override
-//                    public void onError(Throwable t) {
-//                        logger.error(
-//                                String.format("Error while taxi %s is sending ride request approval to taxi %s",
-//                                    taxi.getId(), remoteTaxiInfo.getId()), t);
-//                    }
-//
-//                    @Override
-//                    public void onCompleted() {}
-//                }
-//        );
-//    }
-//
-//    //
-//    public void sendUpdateRideRequestApproval(RideRequestDto rideRequest, boolean isAlreadyConfirmed) {
-//        TaxiServiceOuterClass.RideRequestUpdateRequest request = TaxiServiceOuterClass.RideRequestUpdateRequest
-//                .newBuilder()
-//                .setRideRequestId(rideRequest.getId())
-//                .setTaxiId(this.taxi.getId())
-//                .setIsAlreadyConfirmed(isAlreadyConfirmed)
-//                .build();
-//        TaxiServiceGrpc.newStub(this.channel.get()).updateRideRequestApproval(request,
-//                new StreamObserver<Empty>() {
-//                    @Override
-//                    public void onNext(Empty value) {
-//                    }
-//
-//                    @Override
-//                    public void onError(Throwable t) {
-//                        logger.error("Error while updating ride request approval", t);
-//                    }
-//
-//                    @Override
-//                    public void onCompleted() {}
-//                });
-//    }
 }

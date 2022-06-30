@@ -1,6 +1,5 @@
 package unimi.dsp.taxi;
 
-import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsDto;

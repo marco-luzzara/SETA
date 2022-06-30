@@ -291,10 +291,18 @@ public class Taxi implements Closeable  {
 
         this.rechargeAwaitingTaxiIds = new HashSet<>();
         this.localRechargeRequestTs = System.currentTimeMillis();
-        NetworkTaxiConnection[] taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
+
+        NetworkTaxiConnection[] taxiConnections = this.getTaxiConnectionsInSameDistrict()
+                .toArray(new NetworkTaxiConnection[0]);
+        List<Integer> taxiIdsToWait = new ArrayList<>();
         ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length, (i) -> {
-            taxiConnections[i].sendAskRechargeRequestApproval();
+            if (!taxiConnections[i].sendAskRechargeRequestApproval())
+                taxiIdsToWait.add(taxiConnections[i].getRemoteTaxiId());
         });
+
+        synchronized (this.getRechargeAwaitingTaxiIds()) {
+            this.getRechargeAwaitingTaxiIds().addAll(taxiIdsToWait);
+        }
 
         this.accessTheRechargeStationIfPossible();
     }
@@ -384,6 +392,7 @@ public class Taxi implements Closeable  {
         this.x = rideRequest.getEnd().x;
         this.y = rideRequest.getEnd().y;
 
+        // TODO: I am notifying taxis that I already am in the new district already
         if (!oldDistrict.equals(this.getDistrict())) {
             this.rideRequestElectionsMap.clear();
             this.informOtherTaxisAboutDistrictChanged();

@@ -3,7 +3,6 @@ package unimi.dsp.taxi.services.rest;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.GenericType;
-import unimi.dsp.adminServer.exceptions.IdNotFoundException;
 import unimi.dsp.dto.NewTaxiDto;
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsDto;
