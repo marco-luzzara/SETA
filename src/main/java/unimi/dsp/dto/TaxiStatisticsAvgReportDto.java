@@ -10,7 +10,7 @@ public class TaxiStatisticsAvgReportDto {
     private double avgPollutionLevel;
     private double avgNumRides;
 
-    public TaxiStatisticsAvgReportDto() {}
+    private TaxiStatisticsAvgReportDto() {}
     public TaxiStatisticsAvgReportDto(double avgKmsTraveled,
                                       double avgBatteryLevel,
                                       double avgPollutionLevel,
@@ -71,13 +71,11 @@ public class TaxiStatisticsAvgReportDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("TaxiStatisticsReportOfTypeAvg {\n");
-        sb.append("    avgKmsTraveled: ").append(avgKmsTraveled).append("\n");
-        sb.append("    avgBatteryLevel: ").append(avgBatteryLevel).append("\n");
-        sb.append("    avgPollutionLevel: ").append(avgPollutionLevel).append("\n");
-        sb.append("    avgNumRides: ").append(avgNumRides).append("\n");
-        sb.append("}");
-        return sb.toString();
+        return "TaxiStatisticsReportOfTypeAvg {\n" +
+                "    avgKmsTraveled: " + avgKmsTraveled + "\n" +
+                "    avgBatteryLevel: " + avgBatteryLevel + "\n" +
+                "    avgPollutionLevel: " + avgPollutionLevel + "\n" +
+                "    avgNumRides: " + avgNumRides + "\n" +
+                "}";
     }
 }

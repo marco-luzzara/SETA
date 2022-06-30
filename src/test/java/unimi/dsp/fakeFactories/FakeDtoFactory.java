@@ -2,7 +2,6 @@ package unimi.dsp.fakeFactories;
 
 import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.dto.TaxiStatisticsDto;
-import unimi.dsp.dto.TaxiStatisticsValues;
 import unimi.dsp.dto.types.SerializableOffsetDateTime;
 
 import java.time.OffsetDateTime;
@@ -25,7 +24,7 @@ public class FakeDtoFactory {
 
     private static TaxiStatisticsDto createTaxiStatisticsDtoFromParams(int seed, OffsetDateTime ts) {
         return new TaxiStatisticsDto(new SerializableOffsetDateTime(ts.toString()), seed,
-                new TaxiStatisticsValues(seed, seed,
+                new TaxiStatisticsDto.TaxiStatisticsValues(seed, seed,
                         new ArrayList<Double>() {{ add((double)seed); }}));
     }
 }

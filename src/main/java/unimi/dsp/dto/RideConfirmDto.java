@@ -36,11 +36,8 @@ public class RideConfirmDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("RideConfirm {\n");
-        sb.append("    id: ").append(this.rideId).append("\n");
-        sb.append("}");
-
-        return sb.toString();
+        return "RideConfirm {\n" +
+                "    id: " + this.rideId + "\n" +
+                "}";
     }
 }

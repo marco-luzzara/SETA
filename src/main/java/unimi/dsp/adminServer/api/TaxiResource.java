@@ -34,7 +34,7 @@ public class TaxiResource {
             @QueryParam("n") Integer n,
             @QueryParam("type") @DefaultValue("AVERAGE") String type) {
         if (id == null || n == null)
-            Response.status(Response.Status.BAD_REQUEST)
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("id and n cannot be null").build();
 
         try {
@@ -56,7 +56,7 @@ public class TaxiResource {
             @QueryParam("tsEnd") SerializableOffsetDateTime tsEnd,
             @QueryParam("type") @DefaultValue("AVERAGE") String type) {
         if (tsStart == null || tsEnd == null)
-            Response.status(Response.Status.BAD_REQUEST)
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("tsStart and tsEnd cannot be null").build();
 
         try {
@@ -75,7 +75,7 @@ public class TaxiResource {
             @PathParam("id") Integer id,
             TaxiStatisticsDto taxiStatistics) {
         if (id == null || taxiStatistics == null)
-            Response.status(Response.Status.BAD_REQUEST)
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("id and statistics object cannot be null").build();
 
         try {
@@ -92,7 +92,7 @@ public class TaxiResource {
     public Response registerTaxi(
             TaxiInfoDto taxiInfoDto) {
         if (taxiInfoDto == null)
-            Response.status(Response.Status.BAD_REQUEST)
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("taxi info object cannot be null").build();
 
         try {
@@ -108,7 +108,7 @@ public class TaxiResource {
     public Response removeTaxi(
             @PathParam("id") Integer id) {
         if (id == null)
-            Response.status(Response.Status.BAD_REQUEST)
+            return Response.status(Response.Status.BAD_REQUEST)
                     .entity("id cannot be null").build();
 
         try {

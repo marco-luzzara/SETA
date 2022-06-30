@@ -10,7 +10,7 @@ public class NewTaxiDto {
     private int y;
     private List<TaxiInfoDto> taxiInfos;
 
-    public NewTaxiDto() {}
+    private NewTaxiDto() {}
 
     public NewTaxiDto(int x, int y, List<TaxiInfoDto> taxiInfos) {
         this.x = x;
@@ -54,13 +54,10 @@ public class NewTaxiDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("NewTaxi {\n");
-        sb.append("    x: ").append(x).append("\n");
-        sb.append("    y: ").append(y).append("\n");
-        sb.append("    taxiInfo: ").append(taxiInfos).append("\n");
-        sb.append("}");
-
-        return sb.toString();
+        return "NewTaxi {\n" +
+                "    x: " + x + "\n" +
+                "    y: " + y + "\n" +
+                "    taxiInfo: " + taxiInfos + "\n" +
+                "}";
     }
 }

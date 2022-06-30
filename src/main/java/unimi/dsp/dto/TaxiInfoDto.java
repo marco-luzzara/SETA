@@ -9,7 +9,7 @@ public class TaxiInfoDto {
     private String ipAddress;
     private int port;
 
-    public TaxiInfoDto() {}
+    private TaxiInfoDto() {}
 
     public TaxiInfoDto(int id, String ipAddress, int port) {
         this.id = id;
@@ -60,14 +60,11 @@ public class TaxiInfoDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("TaxiInfo {\n");
-        sb.append("    id: ").append(id).append("\n");
-        sb.append("    ipAddress: ").append(ipAddress).append("\n");
-        sb.append("    port: ").append(port).append("\n");
-        sb.append("}");
-
-        return sb.toString();
+        return "TaxiInfo {\n" +
+                "    id: " + id + "\n" +
+                "    ipAddress: " + ipAddress + "\n" +
+                "    port: " + port + "\n" +
+                "}";
     }
 }
 

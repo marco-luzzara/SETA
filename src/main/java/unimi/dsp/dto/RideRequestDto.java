@@ -63,13 +63,10 @@ public class RideRequestDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("RideRequest {\n");
-        sb.append("    id: ").append(id).append("\n");
-        sb.append("    start: ").append(new SmartCityPosition(xStart, yStart)).append("\n");
-        sb.append("    end: ").append(new SmartCityPosition(xEnd, yEnd)).append("\n");
-        sb.append("}");
-
-        return sb.toString();
+        return "RideRequest {\n" +
+                "    id: " + id + "\n" +
+                "    start: " + new SmartCityPosition(xStart, yStart) + "\n" +
+                "    end: " + new SmartCityPosition(xEnd, yEnd) + "\n" +
+                "}";
     }
 }

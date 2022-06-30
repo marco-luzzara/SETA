@@ -7,6 +7,7 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Objects;
 
 @XmlRootElement
@@ -16,7 +17,7 @@ public class TaxiStatisticsDto {
     private int batteryLevel;
     private TaxiStatisticsValues statsValues;
 
-    public TaxiStatisticsDto() {}
+    private TaxiStatisticsDto() {}
     public TaxiStatisticsDto(SerializableOffsetDateTime ts, int batteryLevel, TaxiStatisticsValues statsValues) {
         this.ts = DateTimeUtil.getStringFromOffsetDateTime(ts.getOdt());
         this.batteryLevel = batteryLevel;
@@ -65,14 +66,74 @@ public class TaxiStatisticsDto {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("TaxiStatistics {\n");
-        sb.append("    ts: ").append(ts).append("\n");
-        sb.append("    batteryLevel: ").append(batteryLevel).append("\n");
-        sb.append("    stats: ").append(statsValues).append("\n");
-        sb.append("}");
+        return "TaxiStatistics {\n" +
+                "    ts: " + ts + "\n" +
+                "    batteryLevel: " + batteryLevel + "\n" +
+                "    stats: " + statsValues + "\n" +
+                "}";
+    }
 
-        return sb.toString();
+    @XmlRootElement
+    public static class TaxiStatisticsValues {
+        private double kmsTraveled;
+        private int numRides;
+        private List<Double> pollutionAvgList = null;
+
+        private TaxiStatisticsValues() {}
+        public TaxiStatisticsValues(double kmsTraveled, int numRides, List<Double> pollutionAvgList) {
+            this.kmsTraveled = kmsTraveled;
+            this.numRides = numRides;
+            this.pollutionAvgList = pollutionAvgList;
+        }
+
+        public double getKmsTraveled() {
+            return kmsTraveled;
+        }
+        public void setKmsTraveled(int kmsTraveled) {
+            this.kmsTraveled = kmsTraveled;
+        }
+
+        public int getNumRides() {
+            return numRides;
+        }
+        public void setNumRides(int numRides) {
+            this.numRides = numRides;
+        }
+
+        public List<Double> getPollutionAvgList() {
+            return pollutionAvgList;
+        }
+        public void setPollutionAvgList(List<Double> pollutionAvgList) {
+            this.pollutionAvgList = pollutionAvgList;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            TaxiStatisticsValues taxiStatisticsValues = (TaxiStatisticsValues) o;
+            return Objects.equals(this.kmsTraveled, taxiStatisticsValues.kmsTraveled) &&
+                    Objects.equals(this.numRides, taxiStatisticsValues.numRides) &&
+                    Objects.equals(this.pollutionAvgList, taxiStatisticsValues.pollutionAvgList);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(kmsTraveled, numRides, pollutionAvgList);
+        }
+
+        @Override
+        public String toString() {
+            return "TaxiStatisticsStats {\n" +
+                    "        kmsTraveled: " + kmsTraveled + "\n" +
+                    "        numRides: " + numRides + "\n" +
+                    "        pollutionAvgList: " + pollutionAvgList + "\n" +
+                    "    }";
+        }
     }
 }
 
