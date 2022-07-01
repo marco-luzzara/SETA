@@ -53,6 +53,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     @Override
     public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest request, StreamObserver<Empty> responseObserver) {
         synchronized (this.taxi.getNetworkTaxiConnections()) {
+            this.taxi.getNetworkTaxiConnections().get(request.getId()).close();
             this.taxi.getNetworkTaxiConnections().remove(request.getId());
         }
 

@@ -420,9 +420,7 @@ public class Taxi implements Closeable  {
             synchronized (this.rideRequestElectionsMap) {
                 synchronized (this) {
                     if (!this.getStatus().equals(TaxiStatus.AVAILABLE) ||
-                            (rideRequestElectionsMap.containsKey(rideRequest) &&
-                                    rideRequestElectionsMap.get(rideRequest).getRideElectionState()
-                                        .equals(RideElectionInfo.RideElectionState.ELECTED)))
+                            rideRequestElectionsMap.containsKey(rideRequest))
                         return;
 
                     logger.info("Taxi {} received the ride request {}", this.id, rideRequest.getId());
