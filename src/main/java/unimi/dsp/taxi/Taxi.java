@@ -43,25 +43,25 @@ public class Taxi implements Closeable  {
     private final int port;
     private final TaxiConfig taxiConfig;
     private volatile int batteryLevel;
-    // x and y are volatile because they are never updated at the same time by different threads
+    // x and y are volatile because they are never updated at the same time by different threads,
     // but they could be read by different threads
     private volatile int x;
     private volatile int y;
     // map that associate a taxi id with a connection to the corresponding taxi in the network
-    private Map<Integer, NetworkTaxiConnection> networkTaxis;
-    private TaxiStatus status;
+    private final Map<Integer, NetworkTaxiConnection> networkTaxis;
+    private volatile TaxiStatus status;
     // recharging
-    private long localRechargeRequestTs;
+    private volatile long localRechargeRequestTs;
     // I have approved the requests coming from these taxis. this means that I cannot recharge
     // until I get back an OK from them (if I have approved them it means they have the priority).
-    private Set<Integer> rechargeAwaitingTaxiIds;
+    private final Set<Integer> rechargeAwaitingTaxiIds;
     // the key of the outer map represents the ride request, while the key of the inner map
-    // is the currently greater Id of that election
+    // is the currently greater id of that election
     private final Map<RideRequestDto, RideElectionInfo> rideRequestElectionsMap;
 
     // statistics
     private Simulator pollutionDataProvider;
-    private Thread pollutionCollectingThread;
+    private final Thread pollutionCollectingThread;
     private volatile double kmsTraveled = 0;
     private final Set<Integer> takenRides;
 
@@ -87,10 +87,9 @@ public class Taxi implements Closeable  {
         this.batteryLevel = this.taxiConfig.initialBatteryLevel;
         this.takenRides = new HashSet<>();
         this.status = TaxiStatus.UNSTARTED;
-        this.networkTaxis = ConcurrencyUtils.makeSynchronized(Map.class,
-                new HashMap<Integer, NetworkTaxiConnection>());
-        this.rideRequestElectionsMap = ConcurrencyUtils.makeSynchronized(Map.class,
-                new HashMap<RideRequestDto, RideElectionInfo>());
+        this.networkTaxis = new HashMap<>();
+        this.rideRequestElectionsMap = new HashMap<>();
+        this.rechargeAwaitingTaxiIds = new HashSet<>();
         Buffer buffer = new SlidingWindowBuffer(taxiConfig.slidingWindowBufferSize,
                 taxiConfig.slidingWindowOverlappingFactor);
         this.initializeSimulator(buffer);
@@ -165,16 +164,12 @@ public class Taxi implements Closeable  {
         return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
-    static public double getDistanceBetweenRideStartAndEnd(RideRequestDto rideRequest) {
-        double deltaX = rideRequest.getEnd().x - rideRequest.getStart().x;
-        double deltaY = rideRequest.getEnd().y - rideRequest.getStart().y;
-        return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    }
-
     public Collection<NetworkTaxiConnection> getTaxiConnectionsInSameDistrict() {
-        return this.networkTaxis.values().stream()
-                .filter(conn -> conn.getRemoteTaxiDistrict().equals(this.getDistrict()))
-                .collect(Collectors.toList());
+        synchronized (this.networkTaxis) {
+            return this.networkTaxis.values().stream()
+                    .filter(conn -> conn.getRemoteTaxiDistrict().equals(this.getDistrict()))
+                    .collect(Collectors.toList());
+        }
     }
 
     public Optional<NetworkTaxiConnection> getNextDistrictTaxiConnection() {
@@ -193,10 +188,12 @@ public class Taxi implements Closeable  {
     }
 
     public Collection<Integer> getTaxiIdsInSameDistrict() {
-        return this.networkTaxis.entrySet().stream()
-                .filter(entry -> entry.getValue().getRemoteTaxiDistrict().equals(this.getDistrict()))
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toList());
+        synchronized (this.networkTaxis) {
+            return this.networkTaxis.entrySet().stream()
+                    .filter(entry -> entry.getValue().getRemoteTaxiDistrict().equals(this.getDistrict()))
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toList());
+        }
     }
 
     public void enterInSETANetwork() {
@@ -218,6 +215,7 @@ public class Taxi implements Closeable  {
         // not based on previous state of object
         this.kmsTraveled = 0;
 
+        // TODO: check synchronization
         synchronized (this.takenRides) {
             takenRides.clear();
         }
@@ -232,7 +230,7 @@ public class Taxi implements Closeable  {
         logger.info("Taxi {} goes from status {} to {}",
                 this.id, this.status.toString(), status.toString());
         this.status = status;
-        // necessary to unlock a quit or recharge command if pending
+        // necessary to unlock a quit command if pending
         if (!this.status.equals(TaxiStatus.RECHARGING) && !this.status.equals(TaxiStatus.DRIVING))
             this.notify();
     }
@@ -257,39 +255,35 @@ public class Taxi implements Closeable  {
         NewTaxiDto newTaxi = this.adminService.registerTaxi(new TaxiInfoDto(this.id, this.host, this.port));
         this.x = newTaxi.getX();
         this.y = newTaxi.getY();
-        for (TaxiInfoDto taxiInfoDto : newTaxi.getTaxiInfos()) {
-            this.networkTaxis.put(taxiInfoDto.getId(), new NetworkTaxiConnection(this, taxiInfoDto));
+        synchronized (this.networkTaxis) {
+            for (TaxiInfoDto taxiInfoDto : newTaxi.getTaxiInfos()) {
+                this.networkTaxis.put(taxiInfoDto.getId(), new NetworkTaxiConnection(this, taxiInfoDto));
+            }
         }
         logger.info("Taxi {} registered to server", this.id);
     }
 
     void informOtherTaxisAboutEnteringTheNetwork() {
-        List<Thread> notificationThreads = new ArrayList<>();
-        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
-            Thread notificationThread = new Thread(taxiConnection::sendAddTaxi);
-            notificationThreads.add(notificationThread);
-            notificationThread.start();
+        NetworkTaxiConnection[] taxiConnections;
+        synchronized (this.networkTaxis) {
+            taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
         }
-
-        for (Thread notificationThread : notificationThreads) {
-            try {
-                notificationThread.join();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length,
+                (i) -> taxiConnections[i].sendAddTaxi());
 
         logger.info("Taxi {} presented itself to the other taxis", this.id);
     }
 
-    public synchronized void askForTheRechargeStation() {
-        if (this.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE) ||
-                this.getStatus().equals(TaxiStatus.RECHARGING))
-            return;
+    public void askForTheRechargeStation() {
+        synchronized (this) {
+            if (this.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE) ||
+                    this.getStatus().equals(TaxiStatus.RECHARGING))
+                return;
 
-        this.setStatus(TaxiStatus.WAITING_TO_RECHARGE);
+            this.setStatus(TaxiStatus.WAITING_TO_RECHARGE);
+        }
 
-        this.rechargeAwaitingTaxiIds = new HashSet<>();
+        this.rechargeAwaitingTaxiIds.clear();
         this.localRechargeRequestTs = System.currentTimeMillis();
 
         NetworkTaxiConnection[] taxiConnections = this.getTaxiConnectionsInSameDistrict()
@@ -300,29 +294,29 @@ public class Taxi implements Closeable  {
                 taxiIdsToWait.add(taxiConnections[i].getRemoteTaxiId());
         });
 
-        synchronized (this.getRechargeAwaitingTaxiIds()) {
-            this.getRechargeAwaitingTaxiIds().addAll(taxiIdsToWait);
+        synchronized (this.rechargeAwaitingTaxiIds) {
+            this.rechargeAwaitingTaxiIds.addAll(taxiIdsToWait);
         }
 
         this.accessTheRechargeStationIfPossible();
     }
 
-    public synchronized void accessTheRechargeStationIfPossible() {
+    public void accessTheRechargeStationIfPossible() {
         if (!this.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE))
             return;
 
-        synchronized (this.getRechargeAwaitingTaxiIds()) {
-            if (!this.getRechargeAwaitingTaxiIds().isEmpty())
+        synchronized (this.rechargeAwaitingTaxiIds) {
+            if (!this.rechargeAwaitingTaxiIds.isEmpty())
                 return;
         }
 
         this.setStatus(TaxiStatus.RECHARGING);
         double distanceFromRechargeStation = this.getDistanceFromPosition(
                 this.getDistrict().getRechargeStationPosition());
+        // TODO: synchronize on kmsTraveled to avoid to lose some travels
         this.kmsTraveled += distanceFromRechargeStation;
-        this.batteryLevel -= distanceFromRechargeStation *
-                this.taxiConfig.batteryConsumptionPerKm;
         SmartCityPosition rechargeStationPosition = this.getDistrict().getRechargeStationPosition();
+        this.batteryLevel -= (distanceFromRechargeStation * this.taxiConfig.batteryConsumptionPerKm);
         this.x = rechargeStationPosition.x;
         this.y = rechargeStationPosition.y;
         Thread t = new Thread(() -> {
@@ -331,49 +325,51 @@ public class Taxi implements Closeable  {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            // synchronize the entire block because I do not want the taxi to exit
-            // before informing the other taxis too
-            synchronized (this) {
-                this.batteryLevel = this.taxiConfig.initialBatteryLevel;
-                this.setStatus(TaxiStatus.AVAILABLE);
-                this.informOtherTaxisRechargeStationIsFree();
-            }
+
+            this.batteryLevel = this.taxiConfig.initialBatteryLevel;
+            this.informOtherTaxisRechargeStationIsFree();
+            this.setStatus(TaxiStatus.AVAILABLE);
         });
         t.start();
     }
 
     public void informOtherTaxisRechargeStationIsFree() {
-        NetworkTaxiConnection[] taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
-        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length, (i) -> {
-            taxiConnections[i].sendUpdateRechargeRequestApproval();
-        });
+        NetworkTaxiConnection[] taxiConnections = this.getTaxiConnectionsInSameDistrict()
+                .toArray(new NetworkTaxiConnection[0]);
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length,
+                (i) -> taxiConnections[i].sendUpdateRechargeRequestApproval());
     }
 
     // synchronized on this object because it is a possible status changing method
-    public synchronized void takeRideIfPossible(RideRequestDto rideRequest) {
-        if (!this.getStatus().equals(TaxiStatus.AVAILABLE) ||
-                !this.getDistrict().equals(District.fromPosition(rideRequest.getStart())))
-            return;
+    public void takeRideIfPossible(RideRequestDto rideRequest) {
+        synchronized (this) {
+            if (!this.getStatus().equals(TaxiStatus.AVAILABLE) ||
+                    !this.getDistrict().equals(District.fromPosition(rideRequest.getStart())))
+                return;
 
-        this.setStatus(TaxiStatus.DRIVING);
+            this.setStatus(TaxiStatus.DRIVING);
+        }
+
         logger.info("Taxi {} has taken ride {}", this.id, rideRequest.getId());
         synchronized (this.rideRequestElectionsMap) {
             this.rideRequestElectionsMap.get(rideRequest)
                     .setRideElectionState(RideElectionInfo.RideElectionState.ELECTED);
         }
 
-        District oldDistrict = getDistrict();
-        Collection<NetworkTaxiConnection> districtTaxiConnections = this.getTaxiConnectionsInSameDistrict();
-        Thread rideTakenFinalizeThread = new Thread(() -> {
-            // I am running them consequently because they are all async calls
-            for (NetworkTaxiConnection conn : districtTaxiConnections)
-                conn.sendMarkElectionConfirmed(rideRequest.getId(), this.id);
-
+        synchronized (this.takenRides) {
             this.takenRides.add(rideRequest.getId());
-            setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
+        }
 
+        District oldDistrict = this.getDistrict();
+        Thread rideTakenFinalizeThread = new Thread(() -> {
+            setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
             if (!District.fromPosition(rideRequest.getEnd()).equals(oldDistrict))
                 unsubscribeFromDistrictTopic();
+
+            // I am running them consequently because they are all async calls
+            Collection<NetworkTaxiConnection> districtTaxiConnections = this.getTaxiConnectionsInSameDistrict();
+            for (NetworkTaxiConnection conn : districtTaxiConnections)
+                conn.sendMarkElectionConfirmed(rideRequest.getId(), this.id);
         });
         rideTakenFinalizeThread.start();
 
@@ -381,12 +377,12 @@ public class Taxi implements Closeable  {
             Thread.sleep(this.taxiConfig.rideDeliveryDelay);
             rideTakenFinalizeThread.join();
         } catch (InterruptedException e) {
-            logger.error("Sleep for ride is interrupted", e);
+            logger.error("taxi riding is interrupted", e);
             throw new RuntimeException(e);
         }
 
         double rideDistance = (this.getDistanceFromPosition(rideRequest.getStart()) +
-                Taxi.getDistanceBetweenRideStartAndEnd(rideRequest));
+                rideRequest.getDistanceBetweenRideStartAndEnd());
         this.kmsTraveled += rideDistance;
         this.batteryLevel -= rideDistance * this.taxiConfig.batteryConsumptionPerKm;
         this.x = rideRequest.getEnd().x;
@@ -395,47 +391,44 @@ public class Taxi implements Closeable  {
         // TODO: I am notifying taxis that I already am in the new district already
         if (!oldDistrict.equals(this.getDistrict())) {
             this.rideRequestElectionsMap.clear();
+            this.rechargeAwaitingTaxiIds.clear();
             this.informOtherTaxisAboutDistrictChanged();
             this.subscribeToDistrictTopic();
         }
-        // TODO: check if recharge
+
         if (this.batteryLevel < this.taxiConfig.batteryThresholdBeforeRecharge)
             this.askForTheRechargeStation();
         else
             this.setStatus(TaxiStatus.AVAILABLE);
     }
 
+    // TODO: shouldn't I change the `this.networkTaxis` channels too?
     void informOtherTaxisAboutDistrictChanged() {
-        List<Thread> notificationThreads = new ArrayList<>();
-        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
-            Thread notificationThread = new Thread(taxiConnection::sendChangeRemoteTaxiDistrict);
-            notificationThreads.add(notificationThread);
-            notificationThread.start();
+        NetworkTaxiConnection[] taxiConnections;
+        synchronized (this.networkTaxis) {
+            taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
         }
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length,
+                (i) -> taxiConnections[i].sendChangeRemoteTaxiDistrict());
 
-        for (Thread notificationThread : notificationThreads) {
-            try {
-                notificationThread.join();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
         logger.info("Taxi {} informed the other taxis that it is now in the district {}",
                 this.id, this.getDistrict());
     }
 
     void subscribeToDistrictTopic() {
         this.setaPubSub.subscribeToDistrictTopic(this.getDistrict(), (rideRequest) -> {
-            // I want to add an entry in rideRequestElectionsMap only if available and
-            synchronized (rideRequestElectionsMap) {
+            // TODO: check if necessary this synchronization
+            // I want to add an entry in rideRequestElectionsMap only if available and not elected yet
+            // the ride request entry is recreated from scratch as a fallback strategy
+            synchronized (this.rideRequestElectionsMap) {
                 synchronized (this) {
-                    logger.info("Taxi {} received the ride request {}", this.id, rideRequest.getId());
                     if (!this.getStatus().equals(TaxiStatus.AVAILABLE) ||
                             (rideRequestElectionsMap.containsKey(rideRequest) &&
                                     rideRequestElectionsMap.get(rideRequest).getRideElectionState()
                                         .equals(RideElectionInfo.RideElectionState.ELECTED)))
                         return;
 
+                    logger.info("Taxi {} received the ride request {}", this.id, rideRequest.getId());
                     RideElectionInfo rideElectionInfo = new RideElectionInfo(
                             new RideElectionInfo.RideElectionId(this.id,
                                     this.getDistanceFromPosition(rideRequest.getStart()),
@@ -443,15 +436,16 @@ public class Taxi implements Closeable  {
                             RideElectionInfo.RideElectionState.ELECTION);
                     rideRequestElectionsMap.put(rideRequest, rideElectionInfo);
 
-                    this.forwardRideElectionIdOrTakeRide(rideRequest, rideElectionInfo.getRideElectionId());
+                    this.handleRideElectionId(rideRequest, rideElectionInfo.getRideElectionId(), true);
                 }
             }
         });
         logger.info("Taxi {} subscribed to district topic {}", Taxi.this.id, Taxi.this.getDistrict());
     }
 
-    public void forwardRideElectionIdOrTakeRide(RideRequestDto rideRequest,
-                                                RideElectionInfo.RideElectionId rideElectionId) {
+    public void handleRideElectionId(RideRequestDto rideRequest,
+                                     RideElectionInfo.RideElectionId rideElectionId,
+                                     boolean canTakeRide) {
         boolean retry;
         do {
             if (!District.fromPosition(rideRequest.getStart()).equals(this.getDistrict()))
@@ -462,21 +456,9 @@ public class Taxi implements Closeable  {
                         rideElectionId);
             else {
                 retry = false;
-                this.takeRideIfPossible(rideRequest);
+                if (canTakeRide)
+                    this.takeRideIfPossible(rideRequest);
             }
-        } while (retry);
-    }
-
-    public void forwardRideElectionId(RideRequestDto rideRequest,
-                                      RideElectionInfo.RideElectionId rideElectionId) {
-        boolean retry;
-        do {
-            if (!District.fromPosition(rideRequest.getStart()).equals(this.getDistrict()))
-                return;
-            Optional<NetworkTaxiConnection> optNextTaxiInRing = this.getNextDistrictTaxiConnection();
-            retry = optNextTaxiInRing.map(networkTaxiConnection -> networkTaxiConnection
-                    .sendForwardElectionIdOrTakeRide(rideRequest,
-                    rideElectionId)).orElse(false);
         } while (retry);
     }
 
@@ -486,12 +468,14 @@ public class Taxi implements Closeable  {
     }
 
     void informOtherTaxisAboutExitingFromTheNetwork() {
-        for (NetworkTaxiConnection taxiConnection : this.networkTaxis.values()) {
-            taxiConnection.sendRemoveTaxi();
+        NetworkTaxiConnection[] taxiConnections;
+        synchronized (this.networkTaxis) {
+            taxiConnections = this.networkTaxis.values().toArray(new NetworkTaxiConnection[0]);
         }
+        ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length,
+                (i) -> taxiConnections[i].sendRemoveTaxi());
 
-        this.networkTaxis = ConcurrencyUtils.makeSynchronized(Map.class,
-                new HashMap<Integer, NetworkTaxiConnection>());
+        this.networkTaxis.clear();
         logger.info("Taxi {} informed other taxis that it exited from the network", this.id);
     }
 
@@ -535,34 +519,30 @@ public class Taxi implements Closeable  {
                         throw new RuntimeException(e);
                     }
                 }
+
+                // I need to do this because some taxis might be waiting for this OK, even if in WAITING_TO_RECHARGE
+                this.informOtherTaxisRechargeStationIsFree();
+                this.informOtherTaxisAboutExitingFromTheNetwork();
             }
 
             this.pollutionDataProvider.stopMeGently();
             this.pollutionCollectingThread.interrupt();
-            this.informOtherTaxisRechargeStationIsFree();
-            this.informOtherTaxisAboutExitingFromTheNetwork();
             this.unsubscribeFromDistrictTopic();
-            this.unregisterFromServer();
             this.stopGRPCServer();
+            this.unregisterFromServer();
         } finally {
             this.setStatus(TaxiStatus.UNSTARTED);
         }
     }
 
     public enum TaxiStatus {
-        UNSTARTED(0),
-        GRPC_STARTED(1),
-        REGISTERED(2),
-        AVAILABLE(3),
-        WAITING_TO_RECHARGE(4),
-        RECHARGING(5),
-        DRIVING(6);
-
-        private final int value;
-
-        TaxiStatus(int value) {
-            this.value = value;
-        }
+        UNSTARTED,
+        GRPC_STARTED,
+        REGISTERED,
+        AVAILABLE,
+        WAITING_TO_RECHARGE,
+        RECHARGING,
+        DRIVING
     }
 
     public static class TaxiConfig {
@@ -656,9 +636,12 @@ public class Taxi implements Closeable  {
                 }
                 else if (command.equals(RECHARGE_COMMAND)) {
                     synchronized (taxi) {
+                        while (!taxi.getStatus().equals(TaxiStatus.AVAILABLE))
+                            taxi.wait();
                         if (taxi.getStatus().equals(TaxiStatus.WAITING_TO_RECHARGE) ||
                                 taxi.getStatus().equals(TaxiStatus.RECHARGING)) {
                             System.out.println("The taxi is recharging or is waiting for it");
+                            continue;
                         }
                         taxi.askForTheRechargeStation();
                         System.out.println("Taxi will go to the recharge station as soon as possible");
@@ -668,6 +651,8 @@ public class Taxi implements Closeable  {
                     System.out.println("The command " + command + " is not available");
                 }
             }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
 
         try {

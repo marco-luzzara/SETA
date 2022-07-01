@@ -109,6 +109,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         Context ctx = Context.current().fork();
         ctx.run(() -> {
             Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
+            // TODO: check synchronization if necessary this big
             synchronized (rideRequestsMap) {
                 if (rideRequestsMap.containsKey(rideRequest) &&
                         rideRequestsMap.get(rideRequest).getRideElectionState()
@@ -146,7 +147,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         this.taxi.getRideRequestElectionsMap().put(rideRequest, new RideElectionInfo(
                 winningRideElectionId, RideElectionInfo.RideElectionState.ELECTION
         ));
-        this.taxi.forwardRideElectionIdOrTakeRide(rideRequest, winningRideElectionId);
+        this.taxi.handleRideElectionId(rideRequest, winningRideElectionId, true);
     }
 
     private void electionLogicWhenAlreadyParticipant(RideRequestDto rideRequest,
@@ -157,7 +158,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         // forward if the election info id is greater
         if (receivedElectionId.isGreaterThan(rideElectionInfo.getRideElectionId())) {
             rideElectionInfo.setRideElectionId(receivedElectionId);
-            this.taxi.forwardRideElectionId(rideRequest, receivedElectionId);
+            this.taxi.handleRideElectionId(rideRequest, receivedElectionId, false);
         } else if (receivedElectionId.equals(rideElectionInfo.getRideElectionId())) {
             // take the ride if the received election id is the same as the stored on and the taxi id
             // is the same too
@@ -166,8 +167,8 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
             else
                 // otherwise restart the election because the token already completed the ring
                 // but no taxi started the elected phase
-                this.taxi.forwardRideElectionIdOrTakeRide(rideRequest,
-                        createElectionIdFromRideRequest(rideRequest));
+                this.taxi.handleRideElectionId(rideRequest,
+                        createElectionIdFromRideRequest(rideRequest), true);
         }
     }
 
@@ -181,7 +182,7 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     private void electionLogicWhenUnavailable(RideRequestDto rideRequest,
                                               RideElectionInfo.RideElectionId receivedElectionId) {
         // when unavailable, I just forward the request to the next taxi
-        this.taxi.forwardRideElectionId(rideRequest, receivedElectionId);
+        this.taxi.handleRideElectionId(rideRequest, receivedElectionId, false);
     }
 
     @Override
@@ -198,14 +199,14 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
             // for all the other elections, if the taxi winning the election is the greater id in a current
             // election, then that election is restarted
             for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :
-                    this.taxi.getRideRequestElectionsMap().entrySet()) {
+                    rideRequestsMap.entrySet()) {
                 if (!rideElectionEntry.getValue().getRideElectionState()
                         .equals(RideElectionInfo.RideElectionState.ELECTED) &&
                         rideElectionEntry.getValue().getRideElectionId().getTaxiId() == request.getTaxiId()) {
                     RideElectionInfo.RideElectionId newRideElectionId = createElectionIdFromRideRequest(
                             rideElectionEntry.getKey());
                     rideElectionEntry.getValue().setRideElectionId(newRideElectionId);
-                    this.taxi.forwardRideElectionIdOrTakeRide(rideElectionEntry.getKey(), newRideElectionId);
+                    this.taxi.handleRideElectionId(rideElectionEntry.getKey(), newRideElectionId, true);
                     logger.info("Election for ride {} is restarted by taxi {}",
                             rideRequestId, this.taxi.getId());
                 }

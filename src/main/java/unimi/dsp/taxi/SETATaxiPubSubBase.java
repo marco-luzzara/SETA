@@ -4,7 +4,6 @@ import unimi.dsp.dto.RideConfirmDto;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.model.types.District;
 
-import java.io.Closeable;
 import java.util.function.Consumer;
 
 public interface SETATaxiPubSubBase {

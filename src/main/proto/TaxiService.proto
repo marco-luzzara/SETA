@@ -38,17 +38,13 @@ message RideElectionIdRequest {
   int32 batteryLevel = 8;
 }
 
-message RideElectionConfirmRequest {
-  int32 rideRequestId = 1;
-  int32 taxiId = 2;
-}
-
 message ForwardElectionIdResponse {
   bool retry = 1;
 }
 
-message RechargeApprovalRequest {
-  int32 taxiId = 1;
+message RideElectionConfirmRequest {
+  int32 rideRequestId = 1;
+  int32 taxiId = 2;
 }
 
 message RechargeInfoRequest {
@@ -58,6 +54,10 @@ message RechargeInfoRequest {
 
 message RechargeInfoResponse {
   bool ok = 1;
+}
+
+message RechargeApprovalRequest {
+  int32 taxiId = 1;
 }
 
 service TaxiService {

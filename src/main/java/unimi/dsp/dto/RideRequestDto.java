@@ -61,6 +61,12 @@ public class RideRequestDto {
         return Objects.hash(id);
     }
 
+    public double getDistanceBetweenRideStartAndEnd() {
+        double deltaX = this.getEnd().x - this.getStart().x;
+        double deltaY = this.getEnd().y - this.getStart().y;
+        return Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    }
+
     @Override
     public String toString() {
         return "RideRequest {\n" +

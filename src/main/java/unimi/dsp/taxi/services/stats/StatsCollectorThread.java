@@ -81,8 +81,13 @@ public class StatsCollectorThread extends Thread {
     }
 
     @Override
-    public synchronized void interrupt() {
+    public void interrupt() {
         super.interrupt();
+        try {
+            this.join();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
         pollutionDataAggregator.interrupt();
     }
