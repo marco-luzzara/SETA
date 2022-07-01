@@ -366,10 +366,10 @@ public class Taxi implements Closeable  {
             if (!District.fromPosition(rideRequest.getEnd()).equals(oldDistrict))
                 unsubscribeFromDistrictTopic();
 
-            // I am running them consequently because they are all async calls
-            Collection<NetworkTaxiConnection> districtTaxiConnections = this.getTaxiConnectionsInSameDistrict();
-            for (NetworkTaxiConnection conn : districtTaxiConnections)
-                conn.sendMarkElectionConfirmed(rideRequest.getId(), this.id);
+            NetworkTaxiConnection[] districtTaxiConnections = this.getTaxiConnectionsInSameDistrict()
+                    .toArray(new NetworkTaxiConnection[0]);
+            ConcurrencyUtils.runThreadsConcurrentlyAndJoin(districtTaxiConnections.length,
+                    (i) -> districtTaxiConnections[i].sendMarkElectionConfirmed(rideRequest.getId(), this.id));
         });
         rideTakenFinalizeThread.start();
 
@@ -402,7 +402,6 @@ public class Taxi implements Closeable  {
             this.setStatus(TaxiStatus.AVAILABLE);
     }
 
-    // TODO: shouldn't I change the `this.networkTaxis` channels too?
     void informOtherTaxisAboutDistrictChanged() {
         NetworkTaxiConnection[] taxiConnections;
         synchronized (this.networkTaxis) {

@@ -190,6 +190,8 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                                       StreamObserver<Empty> responseObserver) {
         int rideRequestId = request.getRideRequestId();
         Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
+
+        // TODO: big sync block
         synchronized (rideRequestsMap) {
             // I create a fake ride request containing the ride request only because I just need the id
             // in order to avoid re-election of already confirmed ride requests

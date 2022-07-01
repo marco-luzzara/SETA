@@ -53,7 +53,6 @@ public class StatsCollectorThread extends Thread {
         try {
             while (!this.isInterrupted()) {
                 Thread.sleep(statsLoadingDelay);
-                logger.info("sending statistics to the server for taxi {}", this.taxi.getId());
                 this.sendStatisticsToAdminServer();
             }
         } catch (InterruptedException e) {
@@ -64,6 +63,7 @@ public class StatsCollectorThread extends Thread {
     }
 
     private void sendStatisticsToAdminServer() {
+        logger.info("sending statistics to the server for taxi {}", this.taxi.getId());
         List<Double> pollutionAvgsToSend;
         synchronized (this.pollutionAverages) {
             pollutionAvgsToSend = new ArrayList<>(this.pollutionAverages);

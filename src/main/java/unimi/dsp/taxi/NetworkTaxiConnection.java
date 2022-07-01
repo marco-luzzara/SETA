@@ -39,10 +39,10 @@ public class NetworkTaxiConnection {
 
     public void setRemoteTaxiDistrict(District remoteTaxiDistrict) {
         this.remoteTaxiDistrict = remoteTaxiDistrict;
-        this.openChannelBasedOnDistrict();
+        this.openOrCloseChannelBasedOnDistrict();
     }
 
-    private void openChannelBasedOnDistrict() {
+    private void openOrCloseChannelBasedOnDistrict() {
         if (remoteTaxiDistrict.equals(this.taxi.getDistrict()))
             this.openChannelIfNecessary();
         else
@@ -101,7 +101,7 @@ public class NetworkTaxiConnection {
                 .build();
 
         TaxiServiceGrpc.newBlockingStub(this.channel.get()).changeRemoteTaxiDistrict(request);
-        this.openChannelBasedOnDistrict();
+        this.openOrCloseChannelBasedOnDistrict();
     }
 
     public void sendRemoveTaxi() {
@@ -149,24 +149,9 @@ public class NetworkTaxiConnection {
         TaxiServiceOuterClass.RideElectionConfirmRequest request = TaxiServiceOuterClass.RideElectionConfirmRequest
                 .newBuilder().setRideRequestId(rideRequestId).setTaxiId(taxiId).build();
 
-        TaxiServiceGrpc.newStub(this.channel.get()).markElectionConfirmed(request, new StreamObserver<Empty>() {
-            @Override
-            public void onNext(Empty value) {
-                logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
-                        taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                logger.error(
-                        String.format("ERROR: taxi %d cannot send ELECTED info for ride %d to taxi %d",
-                                taxi.getId(), rideRequestId, remoteTaxiInfo.getId()), t);
-            }
-
-            @Override
-            public void onCompleted() {
-            }
-        });
+        logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
+                taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
+        TaxiServiceGrpc.newBlockingStub(this.channel.get()).markElectionConfirmed(request);
     }
 
     public boolean sendAskRechargeRequestApproval() {
@@ -188,24 +173,8 @@ public class NetworkTaxiConnection {
         TaxiServiceOuterClass.RechargeApprovalRequest request = TaxiServiceOuterClass.RechargeApprovalRequest
                 .newBuilder().setTaxiId(this.taxi.getId()).build();
 
-        TaxiServiceGrpc.newStub(this.channel.get()).updateRechargeRequestApproval(request,
-                new StreamObserver<Empty>() {
-                    @Override
-                    public void onNext(Empty value) {
-                        logger.info("Taxi {} sent RECHARGE-FREE update to taxi {}",
-                                taxi.getId(), remoteTaxiInfo.getId());
-                    }
-
-                    @Override
-                    public void onError(Throwable t) {
-                        logger.error(
-                                String.format("ERROR: taxi %d cannot send RECHARGE-FREE update to taxi %d",
-                                        taxi.getId(), remoteTaxiInfo.getId()), t);
-                    }
-
-                    @Override
-                    public void onCompleted() {
-                    }
-                });
+        logger.info("Taxi {} sent RECHARGE-FREE update to taxi {}",
+                taxi.getId(), remoteTaxiInfo.getId());
+        TaxiServiceGrpc.newBlockingStub(this.channel.get()).updateRechargeRequestApproval(request);
     }
 }
