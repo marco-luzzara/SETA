@@ -12,21 +12,24 @@ import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 
+import java.io.Closeable;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public class NetworkTaxiConnection {
+public class NetworkTaxiConnection implements Closeable {
     private static final Logger logger = LogManager.getLogger(NetworkTaxiConnection.class.getName());
 
     private final Taxi taxi;
     private final TaxiInfoDto remoteTaxiInfo;
     private District remoteTaxiDistrict;
-    private Optional<ManagedChannel> channel;
+    private ManagedChannel channel;
 
     public NetworkTaxiConnection(Taxi taxi, TaxiInfoDto remoteTaxiInfo) {
         this.taxi = taxi;
         this.remoteTaxiInfo = remoteTaxiInfo;
-        this.channel = Optional.empty();
+        this.channel = ManagedChannelBuilder
+                .forAddress(this.remoteTaxiInfo.getIpAddress(), this.remoteTaxiInfo.getPort())
+                .usePlaintext().build();
     }
 
     public District getRemoteTaxiDistrict() {
@@ -39,32 +42,14 @@ public class NetworkTaxiConnection {
 
     public void setRemoteTaxiDistrict(District remoteTaxiDistrict) {
         this.remoteTaxiDistrict = remoteTaxiDistrict;
-        this.openOrCloseChannelBasedOnDistrict();
     }
 
-    private void openOrCloseChannelBasedOnDistrict() {
-        if (remoteTaxiDistrict.equals(this.taxi.getDistrict()))
-            this.openChannelIfNecessary();
-        else
-            this.closeChannelIfNecessary();
-    }
-
-    private void openChannelIfNecessary() {
-        if (!this.channel.isPresent())
-            this.channel = Optional.of(ManagedChannelBuilder
-                    .forAddress(this.remoteTaxiInfo.getIpAddress(), this.remoteTaxiInfo.getPort())
-                    .usePlaintext().build());
-    }
-
-    private void closeChannelIfNecessary() {
-        this.channel.ifPresent(c -> {
-            try {
-                c.shutdown().awaitTermination(2, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        });
-        this.channel = Optional.empty();
+    public void close() {
+        try {
+            channel.shutdown().awaitTermination(2, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -72,10 +57,6 @@ public class NetworkTaxiConnection {
      * the channel stays open only for those taxis that are in the same district.
      */
     public void sendAddTaxi() {
-        assert !this.channel.isPresent();
-
-        this.openChannelIfNecessary();
-
         TaxiServiceOuterClass.TaxiAddRequest request = TaxiServiceOuterClass.TaxiAddRequest.newBuilder()
                 .setId(this.taxi.getId())
                 .setIpAddress(this.taxi.getHost())
@@ -84,7 +65,7 @@ public class NetworkTaxiConnection {
                 .setY(this.taxi.getY())
                 .build();
         TaxiServiceOuterClass.TaxiAddResponse response = TaxiServiceGrpc
-                .newBlockingStub(channel.get()).addTaxi(request);
+                .newBlockingStub(channel).addTaxi(request);
 
         District remoteDistrict = District.fromPosition(
                 new SmartCityPosition(response.getX(), response.getY()));
@@ -92,32 +73,24 @@ public class NetworkTaxiConnection {
     }
 
     public void sendChangeRemoteTaxiDistrict() {
-        this.openChannelIfNecessary();
-
         TaxiServiceOuterClass.TaxiNewDistrictRequest request = TaxiServiceOuterClass.TaxiNewDistrictRequest
                 .newBuilder()
                 .setId(this.taxi.getId())
                 .setNewX(this.taxi.getX()).setNewY(this.taxi.getY())
                 .build();
 
-        TaxiServiceGrpc.newBlockingStub(this.channel.get()).changeRemoteTaxiDistrict(request);
-        this.openOrCloseChannelBasedOnDistrict();
+        TaxiServiceGrpc.newBlockingStub(this.channel).changeRemoteTaxiDistrict(request);
     }
 
     public void sendRemoveTaxi() {
-        this.openChannelIfNecessary();
-
         TaxiServiceOuterClass.TaxiRemoveRequest request = TaxiServiceOuterClass.TaxiRemoveRequest.newBuilder()
                 .setId(this.taxi.getId())
                 .build();
-        TaxiServiceGrpc.newBlockingStub(this.channel.get()).removeTaxi(request);
-        this.closeChannelIfNecessary();
+        TaxiServiceGrpc.newBlockingStub(this.channel).removeTaxi(request);
     }
 
     public boolean sendForwardElectionIdOrTakeRide(RideRequestDto rideRequest,
                                                  RideElectionInfo.RideElectionId rideRequestElectionId) {
-        assert this.channel.isPresent();
-
         TaxiServiceOuterClass.RideElectionIdRequest request = TaxiServiceOuterClass.RideElectionIdRequest
                 .newBuilder()
                 .setRideRequestId(rideRequest.getId())
@@ -130,7 +103,7 @@ public class NetworkTaxiConnection {
                 .setBatteryLevel(rideRequestElectionId.getBatteryLevel())
                 .build();
 
-        boolean retry = TaxiServiceGrpc.newBlockingStub(this.channel.get())
+        boolean retry = TaxiServiceGrpc.newBlockingStub(this.channel)
                 .forwardElectionIdOrTakeRide(request).getRetry();
 
         if (retry)
@@ -144,37 +117,31 @@ public class NetworkTaxiConnection {
     }
 
     public void sendMarkElectionConfirmed(int rideRequestId, int taxiId) {
-        assert this.channel.isPresent();
-
         TaxiServiceOuterClass.RideElectionConfirmRequest request = TaxiServiceOuterClass.RideElectionConfirmRequest
                 .newBuilder().setRideRequestId(rideRequestId).setTaxiId(taxiId).build();
 
         logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
                 taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
-        TaxiServiceGrpc.newBlockingStub(this.channel.get()).markElectionConfirmed(request);
+        TaxiServiceGrpc.newBlockingStub(this.channel).markElectionConfirmed(request);
     }
 
     public boolean sendAskRechargeRequestApproval() {
-        assert this.channel.isPresent();
-
         TaxiServiceOuterClass.RechargeInfoRequest request = TaxiServiceOuterClass.RechargeInfoRequest
                 .newBuilder().setTaxiId(this.taxi.getId()).setRechargeTs(this.taxi.getLocalRechargeRequestTs())
                 .build();
 
-        TaxiServiceOuterClass.RechargeInfoResponse response = TaxiServiceGrpc.newBlockingStub(this.channel.get())
+        TaxiServiceOuterClass.RechargeInfoResponse response = TaxiServiceGrpc.newBlockingStub(this.channel)
                 .askRechargeRequestApproval(request);
 
         return response.getOk();
     }
 
     public void sendUpdateRechargeRequestApproval() {
-        assert this.channel.isPresent();
-
         TaxiServiceOuterClass.RechargeApprovalRequest request = TaxiServiceOuterClass.RechargeApprovalRequest
                 .newBuilder().setTaxiId(this.taxi.getId()).build();
 
         logger.info("Taxi {} sent RECHARGE-FREE update to taxi {}",
                 taxi.getId(), remoteTaxiInfo.getId());
-        TaxiServiceGrpc.newBlockingStub(this.channel.get()).updateRechargeRequestApproval(request);
+        TaxiServiceGrpc.newBlockingStub(this.channel).updateRechargeRequestApproval(request);
     }
 }

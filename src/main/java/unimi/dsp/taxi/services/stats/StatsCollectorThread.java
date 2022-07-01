@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.TaxiStatisticsDto;
 import unimi.dsp.dto.types.SerializableOffsetDateTime;
+import unimi.dsp.model.types.TaxiStats;
 import unimi.dsp.sensors.Buffer;
 import unimi.dsp.sensors.Measurement;
 import unimi.dsp.taxi.AdminServiceBase;
@@ -70,13 +71,13 @@ public class StatsCollectorThread extends Thread {
             this.pollutionAverages.clear();
         }
 
+        TaxiStats taxiStats = this.taxi.readAndClearStatistics();
         TaxiStatisticsDto taxiStatistics = new TaxiStatisticsDto(
                 new SerializableOffsetDateTime(
                         DateTimeUtil.getStringFromOffsetDateTime(OffsetDateTime.now(ZoneOffset.UTC))),
                 this.taxi.getBatteryLevel(),
-                new TaxiStatisticsDto.TaxiStatisticsValues(this.taxi.getKmsTraveled(), this.taxi.getTakenRides().size(),
+                new TaxiStatisticsDto.TaxiStatisticsValues(taxiStats.getKmsTraveled(), taxiStats.getTakenRidesNumber(),
                         pollutionAvgsToSend));
-        this.taxi.clearStatistics();
         this.adminService.loadTaxiStatistics(this.taxi.getId(), taxiStatistics);
     }
 

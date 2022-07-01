@@ -17,6 +17,7 @@ import unimi.dsp.dto.TaxiInfoDto;
 import unimi.dsp.model.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
+import unimi.dsp.model.types.TaxiStats;
 import unimi.dsp.sensors.Buffer;
 import unimi.dsp.sensors.SlidingWindowBuffer;
 import unimi.dsp.sensors.simulators.PM10Simulator;
@@ -64,6 +65,7 @@ public class Taxi implements Closeable  {
     private final Thread pollutionCollectingThread;
     private volatile double kmsTraveled = 0;
     private final Set<Integer> takenRides;
+    private final Object lockStats = new Object();
 
     // for grpc communication
     private Server grpcServer;
@@ -127,10 +129,6 @@ public class Taxi implements Closeable  {
 
     public Set<Integer> getTakenRides() {
         return takenRides;
-    }
-
-    public double getKmsTraveled() {
-        return kmsTraveled;
     }
 
     public long getLocalRechargeRequestTs() {
@@ -210,15 +208,15 @@ public class Taxi implements Closeable  {
             this.setStatus(TaxiStatus.AVAILABLE);
     }
 
-    public void clearStatistics() {
-        // I do not need to synchronize in this because it is volatile and assignment is
-        // not based on previous state of object
-        this.kmsTraveled = 0;
-
-        // TODO: check synchronization
-        synchronized (this.takenRides) {
+    public TaxiStats readAndClearStatistics() {
+        TaxiStats taxiStats;
+        synchronized (this.lockStats) {
+            taxiStats = new TaxiStats(this.kmsTraveled, this.takenRides.size());
+            this.kmsTraveled = 0;
             takenRides.clear();
         }
+
+        return taxiStats;
     }
 
     private void startCollectingPollutionData() {
@@ -313,8 +311,9 @@ public class Taxi implements Closeable  {
         this.setStatus(TaxiStatus.RECHARGING);
         double distanceFromRechargeStation = this.getDistanceFromPosition(
                 this.getDistrict().getRechargeStationPosition());
-        // TODO: synchronize on kmsTraveled to avoid to lose some travels
-        this.kmsTraveled += distanceFromRechargeStation;
+        synchronized (this.lockStats) {
+            this.kmsTraveled += distanceFromRechargeStation;
+        }
         SmartCityPosition rechargeStationPosition = this.getDistrict().getRechargeStationPosition();
         this.batteryLevel -= (distanceFromRechargeStation * this.taxiConfig.batteryConsumptionPerKm);
         this.x = rechargeStationPosition.x;
@@ -356,10 +355,6 @@ public class Taxi implements Closeable  {
                     .setRideElectionState(RideElectionInfo.RideElectionState.ELECTED);
         }
 
-        synchronized (this.takenRides) {
-            this.takenRides.add(rideRequest.getId());
-        }
-
         District oldDistrict = this.getDistrict();
         Thread rideTakenFinalizeThread = new Thread(() -> {
             setaPubSub.publishRideConfirmation(new RideConfirmDto(rideRequest.getId()));
@@ -383,7 +378,10 @@ public class Taxi implements Closeable  {
 
         double rideDistance = (this.getDistanceFromPosition(rideRequest.getStart()) +
                 rideRequest.getDistanceBetweenRideStartAndEnd());
-        this.kmsTraveled += rideDistance;
+        synchronized (this.lockStats) {
+            this.kmsTraveled += rideDistance;
+            this.takenRides.add(rideRequest.getId());
+        }
         this.batteryLevel -= rideDistance * this.taxiConfig.batteryConsumptionPerKm;
         this.x = rideRequest.getEnd().x;
         this.y = rideRequest.getEnd().y;
@@ -527,6 +525,10 @@ public class Taxi implements Closeable  {
             this.pollutionDataProvider.stopMeGently();
             this.pollutionCollectingThread.interrupt();
             this.unsubscribeFromDistrictTopic();
+            synchronized (this.networkTaxis) {
+                for (NetworkTaxiConnection conn : this.networkTaxis.values())
+                    conn.close();
+            }
             this.stopGRPCServer();
             this.unregisterFromServer();
         } finally {
