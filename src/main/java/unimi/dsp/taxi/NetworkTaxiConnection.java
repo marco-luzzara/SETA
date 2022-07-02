@@ -13,6 +13,7 @@ import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
 
 import java.io.Closeable;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class NetworkTaxiConnection implements Closeable {
@@ -118,24 +119,9 @@ public class NetworkTaxiConnection implements Closeable {
         TaxiServiceOuterClass.RideElectionConfirmRequest request = TaxiServiceOuterClass.RideElectionConfirmRequest
                 .newBuilder().setRideRequestId(rideRequestId).setTaxiId(taxiId).build();
 
-        TaxiServiceGrpc.newStub(this.channel).markElectionConfirmed(request, new StreamObserver<Empty>() {
-            @Override
-            public void onNext(Empty value) {
-                logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
-                        taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
-            }
-
-            @Override
-            public void onError(Throwable t) {
-                logger.error("Error while Taxi {} sent ELECTED for ride {} to taxi {}",
-                        taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
-            }
-
-            @Override
-            public void onCompleted() {
-
-            }
-        });
+        logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
+                taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
+        TaxiServiceGrpc.newBlockingStub(this.channel).markElectionConfirmed(request);
     }
 
     public boolean sendAskRechargeRequestApproval() {
@@ -156,5 +142,18 @@ public class NetworkTaxiConnection implements Closeable {
         logger.info("Taxi {} sent RECHARGE-FREE update to taxi {}",
                 taxi.getId(), remoteTaxiInfo.getId());
         TaxiServiceGrpc.newBlockingStub(this.channel).updateRechargeRequestApproval(request);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        NetworkTaxiConnection that = (NetworkTaxiConnection) o;
+        return taxi.getId() == that.taxi.getId() && remoteTaxiInfo.getId() == that.remoteTaxiInfo.getId();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(taxi.getId(), remoteTaxiInfo.getId());
     }
 }

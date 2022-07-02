@@ -149,6 +149,10 @@ public class Taxi implements Closeable  {
         return rechargeAwaitingTaxiIds;
     }
 
+    public Map<RideRequestDto, RideElectionInfo> getRideRequestElectionsMap() {
+        return rideRequestElectionsMap;
+    }
+
     public District getDistrict() {
         return District.fromPosition(this.getPosition());
     }
@@ -204,6 +208,14 @@ public class Taxi implements Closeable  {
                     .map(Map.Entry::getKey)
                     .collect(Collectors.toList());
         }
+    }
+
+    // synchronized because I am accessing the ride election map
+    public synchronized void resendElectionMessagesToDistrictNextConnection() {
+        this.rideRequestElectionsMap.entrySet().stream()
+                .filter(e -> e.getValue().getRideElectionState()
+                        .equals(RideElectionInfo.RideElectionState.ELECTION))
+                .forEach(e -> this.handleRideElectionId(e.getKey(), e.getValue().getRideElectionId()));
     }
 
     public void enterInSETANetwork() {
@@ -482,7 +494,6 @@ public class Taxi implements Closeable  {
         ConcurrencyUtils.runThreadsConcurrentlyAndJoin(taxiConnections.length,
                 (i) -> taxiConnections[i].sendRemoveTaxi());
 
-        this.networkTaxis.clear();
         logger.info("Taxi {} informed other taxis that it exited from the network", this.id);
     }
 
@@ -539,6 +550,7 @@ public class Taxi implements Closeable  {
             synchronized (this.networkTaxis) {
                 for (NetworkTaxiConnection conn : this.networkTaxis.values())
                     conn.close();
+                this.networkTaxis.clear();
             }
             this.stopGRPCServer();
             this.unregisterFromServer();
@@ -602,6 +614,7 @@ public class Taxi implements Closeable  {
         }
 
         private void restartElectionsAssociatedToElectedTaxi(RideRequestDto rideRequest, int electedTaxiId) {
+            // TODO: should i put them in the queue?
             // if the taxi winning the election is the greater id in an ongoing
             // election, then that election is restarted
             for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :

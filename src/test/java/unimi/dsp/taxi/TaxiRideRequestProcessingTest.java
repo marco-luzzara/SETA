@@ -212,8 +212,8 @@ public class TaxiRideRequestProcessingTest {
     public void given2TaxisInSameDistrict_When2RidesArePublishedNearerToTheFirstTaxi_ThenTaxisTakeOneRideEach()
             throws InterruptedException {
         positionGeneratorMock.generate(1, 1).generate(4, 4);
-        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 2000, adminService);
-             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 2000, adminService)) {
+        try (Taxi taxi = FakeTaxiFactory.getTaxi(1, 0, adminService);
+             Taxi taxi2 = FakeTaxiFactory.getTaxi(2, 0, adminService)) {
             taxi.enterInSETANetwork();
             taxi2.enterInSETANetwork();
 

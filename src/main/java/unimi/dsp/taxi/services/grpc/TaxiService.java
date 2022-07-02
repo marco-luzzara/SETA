@@ -51,10 +51,24 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
     @Override
     public void removeTaxi(TaxiServiceOuterClass.TaxiRemoveRequest request, StreamObserver<Empty> responseObserver) {
+        boolean isThisPreviousTaxi = false;
         synchronized (this.taxi.getNetworkTaxiConnections()) {
-            this.taxi.getNetworkTaxiConnections().get(request.getId()).close();
-            this.taxi.getNetworkTaxiConnections().remove(request.getId());
+            if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId())) {
+                // set if the next taxi in the ring is the node that sent me this message (notifying that
+                // it will exit)
+                isThisPreviousTaxi = this.taxi.getNextDistrictTaxiConnection().isPresent() &&
+                        this.taxi.getNextDistrictTaxiConnection().get().getRemoteTaxiId() == request.getId();
+
+                this.taxi.getNetworkTaxiConnections().get(request.getId()).close();
+                this.taxi.getNetworkTaxiConnections().remove(request.getId());
+            }
         }
+
+        // I cannot put it inside the above synchronized block because I risk a deadlock because the
+        // lock order is the opposite as the one it should be (this -> network connections object)
+        // I resend all the messages because they are discarded once they arrive in a new district
+        if (isThisPreviousTaxi)
+            this.taxi.resendElectionMessagesToDistrictNextConnection();
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
@@ -65,26 +79,25 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
                                          StreamObserver<Empty> responseObserver) {
         District remoteDistrict = District.fromPosition(
                 new SmartCityPosition(request.getNewX(), request.getNewY()));
+        boolean isThisPreviousTaxi = false;
         synchronized (this.taxi.getNetworkTaxiConnections()) {
-            if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId()))
+            if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId())) {
+                // set if the next taxi in the ring is the node that sent me this message (notifying that
+                // it will change district)
+                isThisPreviousTaxi = this.taxi.getNextDistrictTaxiConnection().isPresent() &&
+                        this.taxi.getNextDistrictTaxiConnection().get().getRemoteTaxiId() == request.getId();
+
                 this.taxi.getNetworkTaxiConnections().get(request.getId())
                         .setRemoteTaxiDistrict(remoteDistrict);
+            }
         }
+
+        if (isThisPreviousTaxi)
+            this.taxi.resendElectionMessagesToDistrictNextConnection();
 
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
     }
-
-//    private void restartElectionsIfNecessary(int removedTaxiId) {
-//        Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-//        synchronized (rideRequestsMap) {
-//            for (Map.Entry<RideRequestDto, RideElectionInfo> entry : rideRequestsMap.entrySet()) {
-//                if (entry.getValue().getRideElectionId().getTaxiId() == removedTaxiId)
-//                    this.taxi.forwardRideElectionIdIfNecessary(
-//                            entry.getKey(), entry.getValue().getRideElectionId());
-//            }
-//        }
-//    }
 
     @Override
     public void forwardElectionIdOrTakeRide(TaxiServiceOuterClass.RideElectionIdRequest request,
