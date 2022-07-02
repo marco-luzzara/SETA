@@ -1,7 +1,9 @@
 package unimi.dsp.taxi;
 
+import com.google.protobuf.Empty;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.RideRequestDto;
@@ -116,9 +118,24 @@ public class NetworkTaxiConnection implements Closeable {
         TaxiServiceOuterClass.RideElectionConfirmRequest request = TaxiServiceOuterClass.RideElectionConfirmRequest
                 .newBuilder().setRideRequestId(rideRequestId).setTaxiId(taxiId).build();
 
-        logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
-                taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
-        TaxiServiceGrpc.newBlockingStub(this.channel).markElectionConfirmed(request);
+        TaxiServiceGrpc.newStub(this.channel).markElectionConfirmed(request, new StreamObserver<Empty>() {
+            @Override
+            public void onNext(Empty value) {
+                logger.info("Taxi {} sent ELECTED for ride {} to taxi {}",
+                        taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
+            }
+
+            @Override
+            public void onError(Throwable t) {
+                logger.error("Error while Taxi {} sent ELECTED for ride {} to taxi {}",
+                        taxi.getId(), rideRequestId, remoteTaxiInfo.getId());
+            }
+
+            @Override
+            public void onCompleted() {
+
+            }
+        });
     }
 
     public boolean sendAskRechargeRequestApproval() {

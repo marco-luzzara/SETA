@@ -118,34 +118,11 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
         // I create a fake ride request containing the ride request only because I just need the id
         // in order to avoid re-election of already confirmed ride requests
         this.taxi.getRideRequestMessagesQueue().put(new RideRequestMessage(
-                new RideElectionInfo(null, RideElectionInfo.RideElectionState.ELECTED),
+                new RideElectionInfo(
+                        new RideElectionInfo.RideElectionId(request.getTaxiId(), 0, 0),
+                        RideElectionInfo.RideElectionState.ELECTED),
                 new RideRequestDto(rideRequestId, new SmartCityPosition(0, 0),
                         new SmartCityPosition(0, 0))));
-
-//        Map<RideRequestDto, RideElectionInfo> rideRequestsMap = this.taxi.getRideRequestElectionsMap();
-//
-//        synchronized (rideRequestsMap) {
-//            // I create a fake ride request containing the ride request only because I just need the id
-//            // in order to avoid re-election of already confirmed ride requests
-//            rideRequestsMap.put(new RideRequestDto(rideRequestId, new SmartCityPosition(0, 0),
-//                            new SmartCityPosition(0, 0)),
-//                    new RideElectionInfo(null, RideElectionInfo.RideElectionState.ELECTED));
-//            // for all the other elections, if the taxi winning the election is the greater id in a current
-//            // election, then that election is restarted
-//            for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :
-//                    rideRequestsMap.entrySet()) {
-//                if (!rideElectionEntry.getValue().getRideElectionState()
-//                        .equals(RideElectionInfo.RideElectionState.ELECTED) &&
-//                        rideElectionEntry.getValue().getRideElectionId().getTaxiId() == request.getTaxiId()) {
-//                    RideElectionInfo.RideElectionId newRideElectionId = createElectionIdFromRideRequest(
-//                            rideElectionEntry.getKey());
-//                    rideElectionEntry.getValue().setRideElectionId(newRideElectionId);
-//                    this.taxi.handleRideElectionId(rideElectionEntry.getKey(), newRideElectionId, true);
-//                    logger.info("Election for ride {} is restarted by taxi {}",
-//                            rideRequestId, this.taxi.getId());
-//                }
-//            }
-//        }
     }
 
     @Override

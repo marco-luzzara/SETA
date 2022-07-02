@@ -561,16 +561,20 @@ public class Taxi implements Closeable  {
 
                     // if the district is different I do not want to process this request so respond
                     // with retry, otherwise I process it
-                    if (!District.fromPosition(rideRequest.getStart()).equals(Taxi.this.getDistrict())) {
-                        message.getSender().ifPresent(s -> s.respondWithRetry(true));
-                        continue;
-                    }
-                    else
-                        message.getSender().ifPresent(s -> s.respondWithRetry(false));
+//                    if (!District.fromPosition(rideRequest.getStart()).equals(Taxi.this.getDistrict())) {
+//                        message.getSender().ifPresent(s -> s.respondWithRetry(true));
+//                        continue;
+//                    }
+//                    else
+//                        message.getSender().ifPresent(s -> s.respondWithRetry(false));
 
                     // I synchronize on taxi so that the status cannot change to recharging and
                     // the ride election map is not cleared in the meanwhile
                     synchronized (Taxi.this) {
+                        // if the district is different I do not want to process this request so continue
+                        if (!District.fromPosition(rideRequest.getStart()).equals(Taxi.this.getDistrict()))
+                            continue;
+
                         if (Taxi.this.rideRequestElectionsMap.containsKey(rideRequest) &&
                                 Taxi.this.rideRequestElectionsMap.get(rideRequest).getRideElectionState()
                                         .equals(RideElectionInfo.RideElectionState.ELECTED))
@@ -578,7 +582,8 @@ public class Taxi implements Closeable  {
 
                         if (rideElectionInfo.getRideElectionState().equals(RideElectionInfo.RideElectionState.ELECTED)) {
                             Taxi.this.rideRequestElectionsMap.put(rideRequest, rideElectionInfo);
-                            // TODO: restarts other elections as in confirmed election in taxiservice
+                            this.restartElectionsAssociatedToElectedTaxi(rideRequest,
+                                    rideElectionInfo.getRideElectionId().getTaxiId());
                             continue;
                         }
 
@@ -593,6 +598,24 @@ public class Taxi implements Closeable  {
                 }
             } catch (InterruptedException e) {
                 // the thread terminated during close()
+            }
+        }
+
+        private void restartElectionsAssociatedToElectedTaxi(RideRequestDto rideRequest, int electedTaxiId) {
+            // if the taxi winning the election is the greater id in an ongoing
+            // election, then that election is restarted
+            for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :
+                    Taxi.this.rideRequestElectionsMap.entrySet()) {
+                if (!rideElectionEntry.getValue().getRideElectionState()
+                        .equals(RideElectionInfo.RideElectionState.ELECTED) &&
+                        rideElectionEntry.getValue().getRideElectionId().getTaxiId() == electedTaxiId) {
+                    RideElectionInfo.RideElectionId newRideElectionId = this.createElectionIdFromRideRequest(
+                            rideElectionEntry.getKey());
+                    rideElectionEntry.getValue().setRideElectionId(newRideElectionId);
+                    Taxi.this.handleRideElectionId(rideElectionEntry.getKey(), newRideElectionId);
+                    logger.info("Election for ride {} is restarted by taxi {}",
+                            rideRequest.getId(), Taxi.this.getId());
+                }
             }
         }
 
