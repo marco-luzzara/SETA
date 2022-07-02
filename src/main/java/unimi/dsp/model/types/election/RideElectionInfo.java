@@ -1,4 +1,4 @@
-package unimi.dsp.model;
+package unimi.dsp.model.types.election;
 
 import java.util.Objects;
 
