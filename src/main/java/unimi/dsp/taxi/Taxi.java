@@ -462,18 +462,12 @@ public class Taxi implements Closeable  {
     public void handleRideElectionId(RideRequestDto rideRequest,
                                      RideElectionInfo.RideElectionId rideElectionId) {
         assert Thread.holdsLock(this);
-        boolean retry;
-        do {
-            Optional<NetworkTaxiConnection> optNextTaxiInRing = this.getNextDistrictTaxiConnection();
-            if (optNextTaxiInRing.isPresent())
-                retry = optNextTaxiInRing.get().sendForwardElectionIdOrTakeRide(rideRequest,
-                        rideElectionId);
-            else {
-                retry = false;
-                if (this.getStatus().equals(TaxiStatus.AVAILABLE))
-                    this.takeRide(rideRequest);
-            }
-        } while (retry);
+
+        Optional<NetworkTaxiConnection> optNextTaxiInRing = this.getNextDistrictTaxiConnection();
+        if (optNextTaxiInRing.isPresent())
+            optNextTaxiInRing.get().sendForwardElectionIdOrTakeRide(rideRequest, rideElectionId);
+        else if (this.getStatus().equals(TaxiStatus.AVAILABLE))
+            this.takeRide(rideRequest);
     }
 
     void unsubscribeFromDistrictTopic() {
@@ -537,19 +531,20 @@ public class Taxi implements Closeable  {
                 // I need to do this because some taxis might be waiting for this OK, even if in WAITING_TO_RECHARGE
                 this.informOtherTaxisRechargeStationIsFree();
                 this.informOtherTaxisAboutExitingFromTheNetwork();
-            }
 
-            this.rideRequestMessageProcessor.interrupt();
-            this.pollutionDataProvider.stopMeGently();
-            this.pollutionCollectingThread.interrupt();
-            this.unsubscribeFromDistrictTopic();
-            synchronized (this.networkTaxis) {
-                for (NetworkTaxiConnection conn : this.networkTaxis.values())
-                    conn.close();
-                this.networkTaxis.clear();
+                this.rideRequestMessageProcessor.interrupt();
+                this.pollutionDataProvider.stopMeGently();
+                this.pollutionCollectingThread.interrupt();
+                this.unsubscribeFromDistrictTopic();
+                synchronized (this.networkTaxis) {
+                    for (NetworkTaxiConnection conn : this.networkTaxis.values())
+                        conn.close();
+                    this.networkTaxis.clear();
+                }
+                this.stopGRPCServer();
+                this.unregisterFromServer();
+                this.setStatus(TaxiStatus.UNSTARTED);
             }
-            this.stopGRPCServer();
-            this.unregisterFromServer();
         } finally {
             this.setStatus(TaxiStatus.UNSTARTED);
         }
@@ -566,15 +561,6 @@ public class Taxi implements Closeable  {
 
                     Taxi.logger.info("Taxi {} received the ride request {}",
                             Taxi.this.id, rideRequest.getId());
-
-                    // if the district is different I do not want to process this request so respond
-                    // with retry, otherwise I process it
-//                    if (!District.fromPosition(rideRequest.getStart()).equals(Taxi.this.getDistrict())) {
-//                        message.getSender().ifPresent(s -> s.respondWithRetry(true));
-//                        continue;
-//                    }
-//                    else
-//                        message.getSender().ifPresent(s -> s.respondWithRetry(false));
 
                     // I synchronize on taxi so that the status cannot change to recharging and
                     // the ride election map is not cleared in the meanwhile

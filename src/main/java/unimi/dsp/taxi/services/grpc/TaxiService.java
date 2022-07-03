@@ -108,23 +108,18 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
 
     @Override
     public void forwardElectionIdOrTakeRide(TaxiServiceOuterClass.RideElectionIdRequest request,
-                                 StreamObserver<TaxiServiceOuterClass.ForwardElectionIdResponse> responseObserver) {
+                                 StreamObserver<Empty> responseObserver) {
         RideRequestDto rideRequest = new RideRequestDto(request.getRideRequestId(),
                 new SmartCityPosition(request.getStartX(), request.getStartY()),
                 new SmartCityPosition(request.getEndX(), request.getEndY()));
         RideElectionInfo.RideElectionId receivedElectionId = new RideElectionInfo.RideElectionId(
                 request.getTaxiId(), request.getDistanceFromSP(), request.getBatteryLevel());
 
-        boolean retry = !District.fromPosition(rideRequest.getStart()).equals(this.taxi.getDistrict());
+        this.taxi.getRideRequestMessagesQueue().put(new RideRequestMessage(
+                new RideElectionInfo(receivedElectionId, RideElectionInfo.RideElectionState.ELECTION),
+                rideRequest));
 
-        if (!retry)
-            this.taxi.getRideRequestMessagesQueue().put(new RideRequestMessage(
-                    new RideElectionInfo(receivedElectionId, RideElectionInfo.RideElectionState.ELECTION),
-                    rideRequest));
-
-        responseObserver.onNext(TaxiServiceOuterClass.ForwardElectionIdResponse.newBuilder()
-                .setRetry(retry)
-                .build());
+        responseObserver.onNext(Empty.newBuilder().build());
         responseObserver.onCompleted();
     }
 

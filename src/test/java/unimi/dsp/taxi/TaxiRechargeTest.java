@@ -148,14 +148,13 @@ public class TaxiRechargeTest {
             Thread.sleep(100);
 
             taxi2.askForTheRechargeStation();
-            Thread.sleep(100);
             taxi3.askForTheRechargeStation();
             Thread.sleep(100);
 
             Thread t = new Thread(taxi2::close);
             t.start();
 
-            Thread.sleep(100);
+            Thread.sleep(300);
             assertThat(taxi2.getStatus()).isEqualTo(Taxi.TaxiStatus.UNSTARTED);
 
             Thread.sleep(700);

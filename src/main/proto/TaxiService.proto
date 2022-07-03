@@ -38,10 +38,6 @@ message RideElectionIdRequest {
   int32 batteryLevel = 8;
 }
 
-message ForwardElectionIdResponse {
-  bool retry = 1;
-}
-
 message RideElectionConfirmRequest {
   int32 rideRequestId = 1;
   int32 taxiId = 2;
@@ -64,7 +60,7 @@ service TaxiService {
   rpc addTaxi(TaxiAddRequest) returns (TaxiAddResponse);
   rpc removeTaxi(TaxiRemoveRequest) returns (google.protobuf.Empty);
   rpc changeRemoteTaxiDistrict(TaxiNewDistrictRequest) returns (google.protobuf.Empty);
-  rpc forwardElectionIdOrTakeRide(RideElectionIdRequest) returns (ForwardElectionIdResponse);
+  rpc forwardElectionIdOrTakeRide(RideElectionIdRequest) returns (google.protobuf.Empty);
   rpc markElectionConfirmed(RideElectionConfirmRequest) returns (google.protobuf.Empty);
   rpc askRechargeRequestApproval(RechargeInfoRequest) returns (RechargeInfoResponse);
   rpc updateRechargeRequestApproval(RechargeApprovalRequest) returns (google.protobuf.Empty);

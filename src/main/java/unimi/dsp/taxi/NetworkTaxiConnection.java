@@ -1,7 +1,9 @@
 package unimi.dsp.taxi;
 
+import com.google.protobuf.Empty;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.StreamObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.RideRequestDto;
@@ -87,10 +89,8 @@ public class NetworkTaxiConnection implements Closeable {
         TaxiServiceGrpc.newBlockingStub(this.channel).removeTaxi(request);
     }
 
-    public boolean sendForwardElectionIdOrTakeRide(RideRequestDto rideRequest,
+    public void sendForwardElectionIdOrTakeRide(RideRequestDto rideRequest,
                                                  RideElectionInfo.RideElectionId rideRequestElectionId) {
-        logger.info("Taxi {} sent ELECTION info for ride {} to taxi {}",
-                taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId());
         TaxiServiceOuterClass.RideElectionIdRequest request = TaxiServiceOuterClass.RideElectionIdRequest
                 .newBuilder()
                 .setRideRequestId(rideRequest.getId())
@@ -103,14 +103,9 @@ public class NetworkTaxiConnection implements Closeable {
                 .setBatteryLevel(rideRequestElectionId.getBatteryLevel())
                 .build();
 
-        boolean retry = TaxiServiceGrpc.newBlockingStub(this.channel)
-                .forwardElectionIdOrTakeRide(request).getRetry();
-
-        if (retry)
-            logger.info("Taxi {} cannot send ELECTION info for ride {} to taxi {} because in a new district",
-                    taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId());
-
-        return retry;
+        logger.info("Taxi {} sent ELECTION info for ride {} to taxi {}",
+                taxi.getId(), rideRequest.getId(), remoteTaxiInfo.getId());
+        TaxiServiceGrpc.newBlockingStub(this.channel).forwardElectionIdOrTakeRide(request);
     }
 
     public void sendMarkElectionConfirmed(int rideRequestId, int taxiId) {
