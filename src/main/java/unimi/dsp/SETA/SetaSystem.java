@@ -90,8 +90,6 @@ public class SetaSystem implements Closeable {
         @Override
         public void run() {
             try {
-                SetaSystem.this.setaServerPubSub.publishRideRequest(this.rideRequest);
-
                 synchronized (SetaSystem.this.pendingRideConfirmations) {
                     SetaSystem.this.pendingRideConfirmations.add(this.rideRequest.getId());
                 }
@@ -142,6 +140,7 @@ public class SetaSystem implements Closeable {
                             RideRequestPublisher rideRequestPublisher = new RideRequestPublisher(
                                     this.districtId, rideRequest);
 
+                            SetaSystem.this.setaServerPubSub.publishRideRequest(rideRequest);
                             rideRequestPublisher.start();
                             publishedRequests.add(rideRequest);
                             synchronized (workingThreads) {
