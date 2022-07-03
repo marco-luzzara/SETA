@@ -16,6 +16,8 @@ import unimi.dsp.taxi.Taxi;
 import unimi.dsp.taxi.TaxiServiceGrpc;
 import unimi.dsp.taxi.TaxiServiceOuterClass;
 
+import java.util.Optional;
+
 public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
     private static final Logger logger = LogManager.getLogger(TaxiService.class.getName());
 
@@ -56,8 +58,11 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
             if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId())) {
                 // set if the next taxi in the ring is the node that sent me this message (notifying that
                 // it will exit)
-                isThisPreviousTaxi = this.taxi.getNextDistrictTaxiConnection().isPresent() &&
-                        this.taxi.getNextDistrictTaxiConnection().get().getRemoteTaxiId() == request.getId();
+                // FIXED: getNextDistrictTaxiConnection() must be retrieved first because the district could
+                // change in the meantime
+                Optional<NetworkTaxiConnection> optNextDistrictConn = this.taxi.getNextDistrictTaxiConnection();
+                isThisPreviousTaxi = optNextDistrictConn.isPresent() &&
+                        optNextDistrictConn.get().getRemoteTaxiId() == request.getId();
 
                 this.taxi.getNetworkTaxiConnections().get(request.getId()).close();
                 this.taxi.getNetworkTaxiConnections().remove(request.getId());
@@ -84,8 +89,11 @@ public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
             if (this.taxi.getNetworkTaxiConnections().containsKey(request.getId())) {
                 // set if the next taxi in the ring is the node that sent me this message (notifying that
                 // it will change district)
-                isThisPreviousTaxi = this.taxi.getNextDistrictTaxiConnection().isPresent() &&
-                        this.taxi.getNextDistrictTaxiConnection().get().getRemoteTaxiId() == request.getId();
+                // FIXED: getNextDistrictTaxiConnection() must be retrieved first because the district could
+                // change in the meantime
+                Optional<NetworkTaxiConnection> optNextDistrictConn = this.taxi.getNextDistrictTaxiConnection();
+                isThisPreviousTaxi = optNextDistrictConn.isPresent() &&
+                        optNextDistrictConn.get().getRemoteTaxiId() == request.getId();
 
                 this.taxi.getNetworkTaxiConnections().get(request.getId())
                         .setRemoteTaxiDistrict(remoteDistrict);
