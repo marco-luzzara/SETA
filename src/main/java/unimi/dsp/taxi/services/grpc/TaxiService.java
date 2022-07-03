@@ -10,7 +10,6 @@ import unimi.dsp.model.types.election.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.election.RideRequestMessage;
 import unimi.dsp.model.types.SmartCityPosition;
-import unimi.dsp.model.types.election.RideRequestSender;
 import unimi.dsp.taxi.NetworkTaxiConnection;
 import unimi.dsp.taxi.Taxi;
 import unimi.dsp.taxi.TaxiServiceGrpc;
@@ -19,7 +18,7 @@ import unimi.dsp.taxi.TaxiServiceOuterClass;
 import java.util.Optional;
 
 public class TaxiService extends TaxiServiceGrpc.TaxiServiceImplBase {
-    private static final Logger logger = LogManager.getLogger(TaxiService.class.getName());
+//    private static final Logger logger = LogManager.getLogger(TaxiService.class.getName());
 
     private final Taxi taxi;
 

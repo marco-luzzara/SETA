@@ -149,10 +149,6 @@ public class Taxi implements Closeable  {
         return rechargeAwaitingTaxiIds;
     }
 
-    public Map<RideRequestDto, RideElectionInfo> getRideRequestElectionsMap() {
-        return rideRequestElectionsMap;
-    }
-
     public District getDistrict() {
         return District.fromPosition(this.getPosition());
     }
@@ -614,7 +610,6 @@ public class Taxi implements Closeable  {
         }
 
         private void restartElectionsAssociatedToElectedTaxi(RideRequestDto rideRequest, int electedTaxiId) {
-            // TODO: should i put them in the queue?
             // if the taxi winning the election is the greater id in an ongoing
             // election, then that election is restarted
             for (Map.Entry<RideRequestDto, RideElectionInfo> rideElectionEntry :

@@ -1,16 +1,14 @@
 package unimi.dsp.taxi;
 
-import com.google.protobuf.Empty;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.stub.StreamObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import unimi.dsp.dto.RideRequestDto;
 import unimi.dsp.dto.TaxiInfoDto;
-import unimi.dsp.model.types.election.RideElectionInfo;
 import unimi.dsp.model.types.District;
 import unimi.dsp.model.types.SmartCityPosition;
+import unimi.dsp.model.types.election.RideElectionInfo;
 
 import java.io.Closeable;
 import java.util.Objects;
@@ -22,7 +20,6 @@ public class NetworkTaxiConnection implements Closeable {
     private final Taxi taxi;
     private final TaxiInfoDto remoteTaxiInfo;
     private District remoteTaxiDistrict;
-    // TODO: a channel for each pair would be better instead of having 2 channels for pair
     private final ManagedChannel channel;
 
     public NetworkTaxiConnection(Taxi taxi, TaxiInfoDto remoteTaxiInfo) {

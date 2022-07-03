@@ -1,7 +1,5 @@
 package unimi.dsp.model.types;
 
-import java.util.Set;
-
 public class TaxiStats {
     private final double kmsTraveled;
     private final int takenRidesNumber;

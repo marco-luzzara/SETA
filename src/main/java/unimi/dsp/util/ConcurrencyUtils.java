@@ -1,8 +1,5 @@
 package unimi.dsp.util;
 
-import unimi.dsp.taxi.NetworkTaxiConnection;
-
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;

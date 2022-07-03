@@ -30,9 +30,9 @@ public class RunSimulation {
 
         for (int i = 0; i < Integer.parseInt(args[0]); i++) {
             final int localI = i;
-            Thread taxi = new Thread(() -> {
-                Taxi.main(new String[]{ Integer.toString(localI), "localhost", Integer.toString(5050 + localI)});
-            });
+            Thread taxi = new Thread(() ->
+                    Taxi.main(new String[]{
+                            Integer.toString(localI), "localhost", Integer.toString(5050 + localI)}));
             taxi.start();
         }
     }
