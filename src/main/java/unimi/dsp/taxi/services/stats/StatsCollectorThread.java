@@ -25,6 +25,7 @@ public class StatsCollectorThread extends Thread {
     private final List<Double> pollutionAverages = new ArrayList<>();
     private final Taxi taxi;
     private final AdminServiceBase adminService;
+    private volatile boolean isTerminated = false;
 
     public StatsCollectorThread(Buffer buffer,
                                 int statsLoadingDelay,
@@ -35,7 +36,7 @@ public class StatsCollectorThread extends Thread {
         this.taxi = taxi;
         this.adminService = adminService;
         this.pollutionDataAggregator = new Thread(() -> {
-            while (!Thread.currentThread().isInterrupted()) {
+            while (!this.isTerminated) {
                 double measurementsAvg = this.buffer.readAllAndClean()
                         .stream().mapToDouble(Measurement::getValue).average()
                         .orElse(0);
@@ -90,6 +91,7 @@ public class StatsCollectorThread extends Thread {
             throw new RuntimeException(e);
         }
 
+        this.isTerminated = true;
         pollutionDataAggregator.interrupt();
     }
 }

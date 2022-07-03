@@ -22,7 +22,8 @@ public class NetworkTaxiConnection implements Closeable {
     private final Taxi taxi;
     private final TaxiInfoDto remoteTaxiInfo;
     private District remoteTaxiDistrict;
-    private ManagedChannel channel;
+    // TODO: a channel for each pair would be better instead of having 2 channels for pair
+    private final ManagedChannel channel;
 
     public NetworkTaxiConnection(Taxi taxi, TaxiInfoDto remoteTaxiInfo) {
         this.taxi = taxi;
